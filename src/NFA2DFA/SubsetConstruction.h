@@ -5,36 +5,38 @@
 #include <map>
 
 /*
-    ×Ó¼¯¹¹ÔìËã·¨
+    å­é›†æ„é€ ç®—æ³•
 */
 class SubsetConstruction
 {
 public:
     SubsetConstruction();
     void InputNFA(std::set<char> character, std::string start_node, std::set<std::string> end_nodes, std::map<std::pair<std::string, char>, std::list<std::string>> NFA);
-    void GetDFA();
-    void OutputDFA(std::string new_start_node, std::set<std::string> new_end_nodes, std::map<std::pair<std::string, char>, std::string> new_DFA);
+    void GetDFA();  // ç”Ÿæˆ DFA
+    void OutputDFA(std::string& new_start_node, std::set<std::string>& new_end_nodes, std::map<std::pair<std::string, char>, std::string>& new_DFA);
 
 private:
-    void EpsilonClosure(std::string node);  // ¦Å-±Õ°ü¼ÆËã½Ó¿Ú
+    void EpsilonClosure(std::string node); // Îµ-é—­åŒ…è®¡ç®—æ¥å£
     std::set<std::string> EClosure(std::set<std::string> delta);
-    bool Visited(std::string node);  // ÅĞ¶Ï½ÚµãÊÇ·ñ·ÃÎÊ¹ı£¬ÊÇ·µ»Ø true
-    void EpsilonClosureDFS(std::string node);  // ¦Å-±Õ°ü¼ÆËã£¬Ê¹ÓÃÉî¶ÈÓÅÏÈ±éÀúËã·¨ÊµÏÖ
+    bool Visited(std::string node);  // åˆ¤æ–­èŠ‚ç‚¹æ˜¯å¦è®¿é—®è¿‡ï¼Œæ˜¯è¿”å› true
+    void EpsilonClosureDFS(std::string node); // Îµ-é—­åŒ…è®¡ç®—ï¼Œä½¿ç”¨æ·±åº¦ä¼˜å…ˆéå†ç®—æ³•å®ç°
     std::set<std::string> Delta(std::set<std::string> q, char c);
-    void WorkList(std::string start_node);  // ×Ó¼¯¹¹Ôì¼ÆËã£¬Ê¹ÓÃ¹¤×÷±íËã·¨ÊµÏÖ
-    std::string IDGenerator();  // DFA ×´Ì¬±àºÅÉú³ÉÆ÷
+    void WorkList(std::string start_node); // å­é›†æ„é€ è®¡ç®—ï¼Œä½¿ç”¨å·¥ä½œè¡¨ç®—æ³•å®ç°
+    std::string IDGenerator();  // DFA çŠ¶æ€ç¼–å·ç”Ÿæˆå™¨
 
-    std::set<std::string> m_epsilon_closure;  // Ã¿ÂÖ±Õ°ü¼ÆËãµÄ closure ¼¯ºÏ
+    std::set<std::string> m_epsilon_closure;  // æ¯è½®é—­åŒ…è®¡ç®—çš„ closure é›†åˆ
     std::list<std::set<std::string>> m_worklist;
-    std::map<std::pair<std::string, char>, std::list<std::string>> m_NFA;  // ´æ´¢ NFA Í¼½á¹¹
-    std::map<std::pair<std::set<std::string>, char>, std::set<std::string>> m_DFA;  // ´æ´¢ DFA Í¼½á¹¹
-    std::map<std::string, bool> m_visited;  // ÔÚ½øĞĞ±Õ°ü¼ÆËãÊ±ÅĞ¶ÏÊÇ·ñ·ÃÎÊ¹ı´Ë½Úµã
-    std::set<char> m_character;  // ×´Ì¬×ª»»²ÎÊı
-    std::string m_start_node;  // ×´Ì¬ÆğÊ¼½Úµã
-    std::set<std::string> m_end_nodes;  // ×´Ì¬ÖÕÖ¹½Úµã¼¯ºÏ
+    std::map<std::pair<std::string, char>, std::list<std::string>> m_NFA;  // å­˜å‚¨ NFA å›¾ç»“æ„
+    std::map<std::pair<std::set<std::string>, char>, std::set<std::string>> m_DFA; // å­˜å‚¨ DFA å›¾ç»“æ„
+    std::map<std::string, bool> m_visited;  // åœ¨è¿›è¡Œé—­åŒ…è®¡ç®—æ—¶åˆ¤æ–­æ˜¯å¦è®¿é—®è¿‡æ­¤èŠ‚ç‚¹
+    std::set<char> m_character;  // çŠ¶æ€è½¬æ¢å‚æ•°
+    std::string m_start_node;  // çŠ¶æ€èµ·å§‹èŠ‚ç‚¹
+    std::set<std::string> m_end_nodes;  // çŠ¶æ€ç»ˆæ­¢èŠ‚ç‚¹é›†åˆ
     int m_state_id;
 
-    std::string m_new_start_node;
-    std::set<std::string> m_new_end_nodes;
-    std::map<std::pair<std::string, char>, std::string> m_new_DFA;
+    std::map<std::set<std::string>, std::string> m_state_name; // DFA å„èŠ‚ç‚¹ä¸ç¼–å·åç§°æ˜ å°„
+
+    std::string m_new_start_node;  // ç”Ÿæˆçš„ DFA çš„çŠ¶æ€èµ·å§‹èŠ‚ç‚¹åç§°
+    std::set<std::string> m_new_end_nodes;  // ç”Ÿæˆçš„ DFA çš„çŠ¶æ€ç»ˆæ­¢èŠ‚ç‚¹
+    std::map<std::pair<std::string, char>, std::string> m_new_DFA;  // ç”Ÿæˆçš„ DFA çŠ¶æ€è½¬ç§»è¡¨
 };

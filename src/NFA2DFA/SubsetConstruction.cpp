@@ -9,16 +9,24 @@ SubsetConstruction::SubsetConstruction()
     m_character = std::set<char>();
     m_end_nodes = std::set<std::string>();
     m_state_id = 0;
+    m_state_name = std::map<std::set<std::string>, std::string>();
+    m_new_start_node = "";
+    m_new_end_nodes = std::set<std::string>();
+    m_new_DFA = std::map<std::pair<std::string, char>, std::string>();
 }
 
-void SubsetConstruction::InputNFA(std::set<char> character, std::string start_node, std::set<std::string> end_nodes, std::map<std::pair<std::string, char>, std::list<std::string>> NFA)
+void SubsetConstruction::InputNFA(std::set<char> character, std::string start_node,
+    std::set<std::string> end_nodes, std::map<std::pair<std::string, char>, std::list<std::string>> NFA)
 {
     m_character = character;
     m_start_node = start_node;
     m_end_nodes = end_nodes;
     m_NFA = NFA;
     m_state_id = 0;
-
+    m_state_name.clear();
+    m_new_start_node = "";
+    m_new_end_nodes.clear();
+    m_new_DFA.clear();
 }
 
 std::string SubsetConstruction::IDGenerator()
@@ -32,25 +40,18 @@ void SubsetConstruction::GetDFA()
 {
     WorkList(m_start_node);
 
-    m_new_start_node = "";
-    m_new_end_nodes = std::set<std::string>();
-    m_new_DFA = std::map<std::pair<std::string, char>, std::string>();
-
-    std::map<std::set<std::string>, std::string> state_name;
-    state_name = std::map<std::set<std::string>, std::string>();
-
     for (auto node : m_DFA)
     {
         std::set<std::string> from_nodes = node.first.first;
         std::set<std::string> to_nodes = node.second;
 
-        if (state_name.find(from_nodes) == state_name.end())
-            state_name[from_nodes] = IDGenerator();
-        if (state_name.find(to_nodes) == state_name.end())
-            state_name[to_nodes] = IDGenerator();
+        if (m_state_name.find(from_nodes) == m_state_name.end())
+            m_state_name[from_nodes] = IDGenerator();
+        if (m_state_name.find(to_nodes) == m_state_name.end())
+            m_state_name[to_nodes] = IDGenerator();
 
-        std::string from_node = state_name[from_nodes];
-        std::string to_node = state_name[to_nodes];
+        std::string from_node = m_state_name[from_nodes];
+        std::string to_node = m_state_name[to_nodes];
 
         m_new_DFA[std::make_pair(from_node, node.first.second)] = to_node;
 
@@ -61,13 +62,11 @@ void SubsetConstruction::GetDFA()
             if (to_nodes.find(end_node) != to_nodes.end())
                 m_new_end_nodes.insert(to_node);
         }
-
-        if (m_new_start_node == "")
-            m_new_start_node = from_node;
     }
 }
 
-void SubsetConstruction::OutputDFA(std::string new_start_node, std::set<std::string> new_end_nodes, std::map<std::pair<std::string, char>, std::string> new_DFA)
+void SubsetConstruction::OutputDFA(std::string& new_start_node, std::set<std::string>& new_end_nodes, 
+    std::map<std::pair<std::string, char>, std::string>& new_DFA)
 {
     new_start_node = m_new_start_node;
     new_end_nodes = m_new_end_nodes;
@@ -90,14 +89,14 @@ bool SubsetConstruction::Visited(std::string node)
 
 void SubsetConstruction::EpsilonClosureDFS(std::string node)
 {
-    // °Ñ´Ë½Úµã²¢µ½¼¯ºÏÖĞ£¬ÈÎºÎÒ»¸öÔªËØµÄ±Õ°ü¶¼°üº¬×ÔÉí
+    // æŠŠæ­¤èŠ‚ç‚¹å¹¶åˆ°é›†åˆä¸­ï¼Œä»»ä½•ä¸€ä¸ªå…ƒç´ çš„é—­åŒ…éƒ½åŒ…å«è‡ªèº«
     m_epsilon_closure.insert(node);
     m_visited[node] = true;
 
-    // È¡³ö×ªÒÆ²ÎÊıÎª ¦Å µÄ½ÚµãÁĞ±í£¬ÓÃ '\0' ±íÊ¾ ¦Å
+    // å–å‡ºè½¬ç§»å‚æ•°ä¸º Îµ çš„èŠ‚ç‚¹åˆ—è¡¨ï¼Œç”¨ '\0' è¡¨ç¤º Îµ
     std::list<std::string> to_node_list = m_NFA[std::make_pair(node, '\0')];
 
-    // next_node ÊÇ node µÄºó¼Ì½Úµã£¬ÇÒÍ¨¹ı ¦Å ×ª»»
+    // next_node æ˜¯ node çš„åç»§èŠ‚ç‚¹ï¼Œä¸”é€šè¿‡ Îµ è½¬æ¢
     for (auto next_node : to_node_list)
     {
         if (!Visited(next_node))
@@ -137,7 +136,10 @@ std::set<std::string> SubsetConstruction::EClosure(std::set<std::string> delta)
 void SubsetConstruction::WorkList(std::string start_node)
 {
     EpsilonClosure(start_node);
-    std::set<std::string> q0 = m_epsilon_closure;
+    std::set<std::string> q0 = m_epsilon_closure;  // DFA çš„èµ·å§‹èŠ‚ç‚¹
+
+    m_state_name[q0] = IDGenerator();
+    m_new_start_node = m_state_name[q0];
 
     std::set<std::set<std::string>> Q = std::set<std::set<std::string>>();
     Q.insert(q0);
@@ -155,7 +157,7 @@ void SubsetConstruction::WorkList(std::string start_node)
             if (t.size() == 0)
                 continue;
 
-            // ²¢ÉÏ t ¼¯ºÏ
+            // å¹¶ä¸Š t é›†åˆ
             m_DFA[std::make_pair(q, c)].insert(t.begin(), t.end());
 
             if (Q.find(t) == Q.end())
