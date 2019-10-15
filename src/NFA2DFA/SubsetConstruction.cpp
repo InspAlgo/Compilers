@@ -2,21 +2,21 @@
 
 SubsetConstruction::SubsetConstruction()
 {
-    m_NFA = std::map<std::pair<std::string, char>, std::list<std::string>>();
-    m_visited = std::map<std::string, bool>();
-    m_worklist = std::list<std::set<std::string>>();
-    m_start_node = "";
-    m_character = std::set<char>();
-    m_end_nodes = std::set<std::string>();
+    m_NFA = std::map<std::pair<std::wstring, wchar_t>, std::list<std::wstring>>();
+    m_visited = std::map<std::wstring, bool>();
+    m_worklist = std::list<std::set<std::wstring>>();
+    m_start_node = L"";
+    m_character = std::set<wchar_t>();
+    m_end_nodes = std::set<std::wstring>();
     m_state_id = 0;
-    m_state_name = std::map<std::set<std::string>, std::string>();
-    m_new_start_node = "";
-    m_new_end_nodes = std::set<std::string>();
-    m_new_DFA = std::map<std::pair<std::string, char>, std::string>();
+    m_state_name = std::map<std::set<std::wstring>, std::wstring>();
+    m_new_start_node = L"";
+    m_new_end_nodes = std::set<std::wstring>();
+    m_new_DFA = std::map<std::pair<std::wstring, wchar_t>, std::wstring>();
 }
 
-void SubsetConstruction::InputNFA(std::set<char> character, std::string start_node,
-    std::set<std::string> end_nodes, std::map<std::pair<std::string, char>, std::list<std::string>> NFA)
+void SubsetConstruction::InputNFA(std::set<wchar_t> character, std::wstring start_node,
+    std::set<std::wstring> end_nodes, std::map<std::pair<std::wstring, wchar_t>, std::list<std::wstring>> NFA)
 {
     m_character = character;
     m_start_node = start_node;
@@ -24,14 +24,14 @@ void SubsetConstruction::InputNFA(std::set<char> character, std::string start_no
     m_NFA = NFA;
     m_state_id = 0;
     m_state_name.clear();
-    m_new_start_node = "";
+    m_new_start_node = L"";
     m_new_end_nodes.clear();
     m_new_DFA.clear();
 }
 
-std::string SubsetConstruction::IDGenerator()
+std::wstring SubsetConstruction::IDGenerator()
 {
-    std::string id = "q" + std::to_string(m_state_id);
+    std::wstring id = L"q" + std::to_wstring(m_state_id);
     m_state_id++;
     return id;
 }
@@ -42,16 +42,16 @@ void SubsetConstruction::GetDFA()
 
     for (auto node : m_DFA)
     {
-        std::set<std::string> from_nodes = node.first.first;
-        std::set<std::string> to_nodes = node.second;
+        std::set<std::wstring> from_nodes = node.first.first;
+        std::set<std::wstring> to_nodes = node.second;
 
         if (m_state_name.find(from_nodes) == m_state_name.end())
             m_state_name[from_nodes] = IDGenerator();
         if (m_state_name.find(to_nodes) == m_state_name.end())
             m_state_name[to_nodes] = IDGenerator();
 
-        std::string from_node = m_state_name[from_nodes];
-        std::string to_node = m_state_name[to_nodes];
+        std::wstring from_node = m_state_name[from_nodes];
+        std::wstring to_node = m_state_name[to_nodes];
 
         m_new_DFA[std::make_pair(from_node, node.first.second)] = to_node;
 
@@ -65,36 +65,36 @@ void SubsetConstruction::GetDFA()
     }
 }
 
-void SubsetConstruction::OutputDFA(std::string& new_start_node, std::set<std::string>& new_end_nodes, 
-    std::map<std::pair<std::string, char>, std::string>& new_DFA)
+void SubsetConstruction::OutputDFA(std::wstring& new_start_node, std::set<std::wstring>& new_end_nodes, 
+    std::map<std::pair<std::wstring, wchar_t>, std::wstring>& new_DFA)
 {
     new_start_node = m_new_start_node;
     new_end_nodes = m_new_end_nodes;
     new_DFA = m_new_DFA;
 }
 
-void SubsetConstruction::EpsilonClosure(std::string node)
+void SubsetConstruction::EpsilonClosure(std::wstring node)
 {
     m_visited.clear();
-    m_epsilon_closure = std::set<std::string>();
+    m_epsilon_closure = std::set<std::wstring>();
     EpsilonClosureDFS(node);
 }
 
-bool SubsetConstruction::Visited(std::string node)
+bool SubsetConstruction::Visited(std::wstring node)
 {
     if (m_visited.find(node) == m_visited.end())
         return false;
     return true;
 }
 
-void SubsetConstruction::EpsilonClosureDFS(std::string node)
+void SubsetConstruction::EpsilonClosureDFS(std::wstring node)
 {
     // 把此节点并到集合中，任何一个元素的闭包都包含自身
     m_epsilon_closure.insert(node);
     m_visited[node] = true;
 
     // 取出转移参数为 ε 的节点列表，用 '\0' 表示 ε
-    std::list<std::string> to_node_list = m_NFA[std::make_pair(node, '\0')];
+    std::list<std::wstring> to_node_list = m_NFA[std::make_pair(node, L'\0')];
 
     // next_node 是 node 的后继节点，且通过 ε 转换
     for (auto next_node : to_node_list)
@@ -104,9 +104,9 @@ void SubsetConstruction::EpsilonClosureDFS(std::string node)
     }
 }
 
-std::set<std::string> SubsetConstruction::Delta(std::set<std::string> q, char c)
+std::set<std::wstring> SubsetConstruction::Delta(std::set<std::wstring> q, wchar_t c)
 {
-    std::set<std::string> delta = std::set<std::string>();
+    std::set<std::wstring> delta = std::set<std::wstring>();
 
     for (auto q_node : q)
     {
@@ -120,9 +120,9 @@ std::set<std::string> SubsetConstruction::Delta(std::set<std::string> q, char c)
     return delta;
 }
 
-std::set<std::string> SubsetConstruction::EClosure(std::set<std::string> delta)
+std::set<std::wstring> SubsetConstruction::EClosure(std::set<std::wstring> delta)
 {
-    std::set<std::string> e_closure = std::set<std::string>();
+    std::set<std::wstring> e_closure = std::set<std::wstring>();
 
     for (auto node : delta)
     {
@@ -133,27 +133,27 @@ std::set<std::string> SubsetConstruction::EClosure(std::set<std::string> delta)
     return e_closure;
 }
 
-void SubsetConstruction::WorkList(std::string start_node)
+void SubsetConstruction::WorkList(std::wstring start_node)
 {
     EpsilonClosure(start_node);
-    std::set<std::string> q0 = m_epsilon_closure;  // DFA 的起始节点
+    std::set<std::wstring> q0 = m_epsilon_closure;  // DFA 的起始节点
 
-    m_state_name[q0] = IDGenerator();
-    m_new_start_node = m_state_name[q0];
+    m_new_start_node = IDGenerator();
+    m_state_name[q0] = m_new_start_node;
 
-    std::set<std::set<std::string>> Q = std::set<std::set<std::string>>();
+    std::set<std::set<std::wstring>> Q = std::set<std::set<std::wstring>>();
     Q.insert(q0);
 
     m_worklist.push_back(q0);
 
     while (!m_worklist.empty())
     {
-        std::set<std::string> q = m_worklist.front();
+        std::set<std::wstring> q = m_worklist.front();
         m_worklist.pop_front();
 
         for (auto c : m_character)
         {
-            std::set<std::string> t = EClosure(Delta(q, c));
+            std::set<std::wstring> t = EClosure(Delta(q, c));
             if (t.size() == 0)
                 continue;
 
