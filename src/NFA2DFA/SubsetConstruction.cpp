@@ -31,7 +31,7 @@ void SubsetConstruction::InputNFA(std::set<wchar_t> character, std::wstring star
 
 std::wstring SubsetConstruction::IDGenerator()
 {
-    std::wstring id = L"q" + std::to_wstring(m_state_id);
+    auto id = L"q" + std::to_wstring(m_state_id);
     m_state_id++;
     return id;
 }
@@ -42,16 +42,16 @@ void SubsetConstruction::GetDFA()
 
     for (auto node : m_DFA)
     {
-        std::set<std::wstring> from_nodes = node.first.first;
-        std::set<std::wstring> to_nodes = node.second;
+        auto from_nodes = node.first.first;
+        auto to_nodes = node.second;
 
         if (m_state_name.find(from_nodes) == m_state_name.end())
             m_state_name[from_nodes] = IDGenerator();
         if (m_state_name.find(to_nodes) == m_state_name.end())
             m_state_name[to_nodes] = IDGenerator();
 
-        std::wstring from_node = m_state_name[from_nodes];
-        std::wstring to_node = m_state_name[to_nodes];
+        auto from_node = m_state_name[from_nodes];
+        auto to_node = m_state_name[to_nodes];
 
         m_new_DFA[std::make_pair(from_node, node.first.second)] = to_node;
 
@@ -94,7 +94,7 @@ void SubsetConstruction::EpsilonClosureDFS(std::wstring node)
     m_visited[node] = true;
 
     // 取出转移参数为 ε 的节点列表，用 '\0' 表示 ε
-    std::list<std::wstring> to_node_list = m_NFA[std::make_pair(node, L'\0')];
+    auto to_node_list = m_NFA[std::make_pair(node, L'\0')];
 
     // next_node 是 node 的后继节点，且通过 ε 转换
     for (auto next_node : to_node_list)
@@ -106,7 +106,7 @@ void SubsetConstruction::EpsilonClosureDFS(std::wstring node)
 
 std::set<std::wstring> SubsetConstruction::Delta(std::set<std::wstring> q, wchar_t c)
 {
-    std::set<std::wstring> delta = std::set<std::wstring>();
+    auto delta = std::set<std::wstring>();
 
     for (auto q_node : q)
     {
@@ -122,7 +122,7 @@ std::set<std::wstring> SubsetConstruction::Delta(std::set<std::wstring> q, wchar
 
 std::set<std::wstring> SubsetConstruction::EClosure(std::set<std::wstring> delta)
 {
-    std::set<std::wstring> e_closure = std::set<std::wstring>();
+    auto e_closure = std::set<std::wstring>();
 
     for (auto node : delta)
     {
@@ -136,24 +136,24 @@ std::set<std::wstring> SubsetConstruction::EClosure(std::set<std::wstring> delta
 void SubsetConstruction::WorkList(std::wstring start_node)
 {
     EpsilonClosure(start_node);
-    std::set<std::wstring> q0 = m_epsilon_closure;  // DFA 的起始节点
+    auto q0 = m_epsilon_closure;  // DFA 的起始节点
 
     m_new_start_node = IDGenerator();
     m_state_name[q0] = m_new_start_node;
 
-    std::set<std::set<std::wstring>> Q = std::set<std::set<std::wstring>>();
+    auto Q = std::set<std::set<std::wstring>>();
     Q.insert(q0);
 
     m_worklist.push_back(q0);
 
     while (!m_worklist.empty())
     {
-        std::set<std::wstring> q = m_worklist.front();
+        auto q = m_worklist.front();
         m_worklist.pop_front();
 
         for (auto c : m_character)
         {
-            std::set<std::wstring> t = EClosure(Delta(q, c));
+            auto t = EClosure(Delta(q, c));
             if (t.size() == 0)
                 continue;
 
