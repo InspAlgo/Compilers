@@ -1,29 +1,48 @@
 #include "LL1Parsing.h"
 
-LL1Parsing::LL1Parsing()
+M6::LL1Parsing::LL1Parsing()
 {
-    m_terminal = std::set<wchar_t>();
-    m_nonterminal = std::set<wchar_t>();
-    m_productions = std::vector<std::tuple<wchar_t, std::wstring>>();
-    m_first_set = std::map<wchar_t, std::set<wchar_t>>();
-    m_follow_set = std::map<wchar_t, std::set<wchar_t>>();
-    m_predictive_parsing_table = std::map<std::pair<wchar_t, wchar_t>, std::set<std::wstring>>();
+
 }
 
-void LL1Parsing::AddProduction(wchar_t production_left, std::wstring production_right)
+void M6::LL1Parsing::AddProduction(const token &production_left, const std::vector<token> &production_right)
 {
     m_productions.push_back(std::make_tuple(production_left, production_right));
     m_nonterminal.insert(production_left);
+    m_first_s_set[std::make_tuple(production_left, production_right)] = std::set<token>();
 }
 
-void LL1Parsing::GetPredictiveParsingTable()
+void M6::LL1Parsing::RunParsing()
 {
     InitSet();
-    GetNullable();
-    GetFirstSet();
+    CalcNullable();
+    CalcFirstSet();
+    CalcFollowSet();
+    CalcFirstSSet();
+    CalcPredictiveParsingTable();
 }
 
-void LL1Parsing::InitSet()
+void M6::LL1Parsing::GetPredictiveParsingTable(std::map<std::tuple<token, token>,
+    std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table)
+{
+    for (auto i : m_predictive_parsing_table)
+    {
+        predictive_parsing_table[i.first] = i.second;
+    }
+}
+
+void M6::LL1Parsing::Clear()
+{
+    m_nonterminal.clear();
+    m_productions.clear();
+    m_nullable.clear();
+    m_first_set.clear();
+    m_follow_set.clear();
+    m_first_s_set.clear();
+    m_predictive_parsing_table.clear();
+}
+
+void M6::LL1Parsing::InitSet()
 {
     m_first_set.clear();
     m_follow_set.clear();
@@ -32,17 +51,17 @@ void LL1Parsing::InitSet()
     {
         m_nullable[nonterminal] = false;
 
-        m_first_set[nonterminal] = std::set<wchar_t>();
+        m_first_set[nonterminal] = std::set<token>();
         m_first_set[nonterminal].clear();
 
-        m_follow_set[nonterminal] = std::set<wchar_t>();
+        m_follow_set[nonterminal] = std::set<token>();
         m_follow_set[nonterminal].clear();
     }
 }
 
-void LL1Parsing::GetNullable()
+void M6::LL1Parsing::CalcNullable()
 {
-    bool is_changing = true;  // 标记 nullable 在一轮迭代中是否发生改变
+    auto is_changing = true;  // 标记 nullable 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
@@ -54,7 +73,7 @@ void LL1Parsing::GetNullable()
                 continue;
 
             // 如果右部直接就是 ε，说明此非终结符可空
-            if (std::get<1>(production).length() == 0)
+            if (std::get<1>(production)[0].length() == 0)
             {
                 m_nullable[std::get<0>(production)] = true;
                 is_changing = true;
@@ -62,7 +81,7 @@ void LL1Parsing::GetNullable()
             }
 
             // 右部不是 ε，遍历产生式右部每一个符号
-            bool flag = true;
+            auto flag = true;
             for (auto beta_i : std::get<1>(production))
             {
                 if (m_nonterminal.find(beta_i) == m_nonterminal.end()
@@ -81,9 +100,9 @@ void LL1Parsing::GetNullable()
     }
 }
 
-void LL1Parsing::GetFirstSet()
+void M6::LL1Parsing::CalcFirstSet()
 {
-    bool is_changing = true;  // 标记 FIRST 在一轮迭代中是否发生改变
+    auto is_changing = true;  // 标记 FIRST 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
@@ -91,11 +110,11 @@ void LL1Parsing::GetFirstSet()
         for (auto production : m_productions)
         {
             // 右部直接就是 ε
-            if (std::get<1>(production).length() == 0)
+            if (std::get<1>(production)[0].length() == 0)
                 continue;
 
             auto N = std::get<0>(production);
-            int count = m_first_set[N].size();
+            auto count = m_first_set[N].size();
 
             // 右部不是 ε，遍历产生式右部每一个符号
             for (auto beta_i : std::get<1>(production))
@@ -106,7 +125,7 @@ void LL1Parsing::GetFirstSet()
                     m_first_set[N].insert(beta_i);
                     break;
                 }
-                else  // 是非终结符
+                else
                 {
                     m_first_set[N].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
                     if (!m_nullable[beta_i])
@@ -120,32 +139,98 @@ void LL1Parsing::GetFirstSet()
     }
 }
 
-void LL1Parsing::GetFollowSet()
+void M6::LL1Parsing::CalcFollowSet()
 {
-    bool is_changing = true;  // 标记 FOLLOW 在一轮迭代中是否发生改变
+    auto is_changing = true;  // 标记 FOLLOW 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
 
         for (auto production : m_productions)
         {
-            // 右部直接就是 ε
-            if (std::get<1>(production).length() == 0)
+            auto production_right = std::get<1>(production);
+            
+            if (std::get<1>(production)[0].length() == 0)
                 continue;
 
             auto N = std::get<0>(production);
-            int count = m_follow_set[N].size();
-
+            auto count = m_follow_set[N].size();
             auto temp = m_follow_set[N];
 
-            // 右部不是 ε，遍历产生式右部每一个符号
-            for (auto beta_i : std::get<1>(production))
+            // 右部不是 ε，逆序遍历产生式右部每一个符号
+            for (auto iter = production_right.rbegin(); iter != production_right.rend(); ++iter)
             {
-                
+                if (m_nonterminal.find((*iter)) == m_nonterminal.end())
+                    (temp = std::set<token>()).insert((*iter));
+                else
+                {
+                    auto count2 = m_follow_set[(*iter)].size();
+
+                    m_follow_set[(*iter)].insert(temp.begin(), temp.end());
+
+                    if (m_follow_set[(*iter)].size() != count2)
+                        is_changing = true;
+
+                    if (!m_nullable[(*iter)])
+                        temp = m_first_set[(*iter)];
+                    else
+                        temp.insert(m_first_set[(*iter)].begin(), m_first_set[(*iter)].end());
+                }
             }
 
             if (m_follow_set[N].size() != count)
                 is_changing = true;
+        }
+    }
+}
+
+void M6::LL1Parsing::CalcFirstSSet()
+{
+    for (auto production : m_productions)
+    {
+        auto flag = true;
+
+        for (auto beta_i : std::get<1>(production))
+        {
+            if (beta_i.length() == 0)  // 右部是 ε 则跳过
+                continue;
+
+            if (m_nonterminal.find(beta_i) == m_nonterminal.end())
+            {
+                m_first_s_set[production].insert(beta_i);
+                flag = false;
+                break;
+            }
+            else
+            {
+                m_first_s_set[production].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
+                if (!m_nullable[beta_i])
+                {
+                    flag = false;
+                    break;
+                }
+            }
+        }
+
+        if (flag)
+        {
+            auto temp = m_follow_set[std::get<0>(production)];
+            m_first_s_set[production].insert(temp.begin(), temp.end());
+        }
+    }
+}
+
+void M6::LL1Parsing::CalcPredictiveParsingTable()
+{
+    for (auto i : m_first_s_set)
+    {
+        for (auto j : i.second)
+        {
+            auto N = std::get<0>(i.first);
+            auto T = j;
+            auto production = i.first;
+
+            m_predictive_parsing_table[std::make_tuple(N, T)].insert(production);
         }
     }
 }
