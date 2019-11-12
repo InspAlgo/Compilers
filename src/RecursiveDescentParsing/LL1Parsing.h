@@ -29,6 +29,7 @@ namespace M6
         void RemovingIndirectLeftRecursion();  // 消除间接左递归
         void SimplifyGrammar();  // 简化文法，消除不需要的产生式
         void TokenClosure(token node, std::set<token> &token_closure);
+        bool IndirectLeftRecursionTokenClosure(token node, std::vector<token> &token_closure);
 
         void InitSet();  // 将所有的 nullable 初始化为 false，将所有的 FIRST 和 FOLLOW 初始化为空集合
         void CalcNullable();  // 不动点算法求 nullable

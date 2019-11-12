@@ -1,16 +1,17 @@
 #include "LL1Parsing.h"
+#include <iostream>
 
 M6::LL1Parsing::LL1Parsing()
 {
     m_start_token = L"";
+    TokenNode::SetStaticData(L"$", 0);
 }
 
 void M6::LL1Parsing::SetStartToken(token start_token)
 {
     if (start_token.length() > 0)
         m_start_token = start_token;
-    else
-        throw "ERROR: start_token is null.";
+    // TODO 应有 start_token 为空的警告
 }
 
 void M6::LL1Parsing::AddProduction(const token &production_left, const std::vector<token> &production_right)
@@ -64,6 +65,8 @@ void M6::LL1Parsing::Clear()
 */
 void M6::LL1Parsing::CheckGrammar()
 {
+    // 如果没有确定起始非终结符则直接返回
+    // TODO 同时应有相关警告
     if (m_start_token.length() <= 0)
         return;
 
@@ -71,12 +74,20 @@ void M6::LL1Parsing::CheckGrammar()
     RemovingIndirectLeftRecursion();
     RemovingDirectLeftRecursion();
     SimplifyGrammar();
+
+    // 更新 m_productions
+    m_productions.clear();
+    for (auto productions : m_productions_map)
+    {
+        for (auto production : productions.second)
+        {
+            m_productions.push_back(std::make_tuple(productions.first, production));
+        }
+    }
 }
 
 void M6::LL1Parsing::ExtractLeftFactoring()
 {
-    m_productions.clear();
-
     for (auto &productions : m_productions_map)
     {
         TokenNode* head = new TokenNode(productions.first);
@@ -93,11 +104,12 @@ void M6::LL1Parsing::ExtractLeftFactoring()
         auto productions_map = std::map<std::tuple<token, int>, std::vector<token>>();
         head->CreateNewProductions(productions.first, -1, productions_map);
 
+        // 更新 map 和 nonterminal
         for (auto production : productions_map)
         {
             token N = std::get<0>(production.first);
-            m_productions.push_back(std::make_tuple(N, production.second));
             m_productions_map[N].insert(production.second);
+            m_nonterminal.insert(N);
         }
 
         head->DestroyChildNodes();
@@ -106,14 +118,122 @@ void M6::LL1Parsing::ExtractLeftFactoring()
     }
 }
 
-void M6::LL1Parsing::RemovingIndirectLeftRecursion()
+/*
+    间接左递归闭包
+    如产生式 A->BaC|De, B->Ed|FgH, D->Qw, Q->Ac
+    A 能够通过 A=>De=>Qwe=>Acwe 从而有间接左递归的情况
+    此时 A 的间接左递归闭包为 [A,D,Q]
+*/
+bool M6::LL1Parsing::IndirectLeftRecursionTokenClosure(token node, std::vector<token> &token_closure)
 {
+    if (node == token_closure[0])
+        return true;
+    
+    // 防止重复遍历
+    for (auto i : token_closure)
+    {
+        if (i == node)
+            return false;
+    }
 
+    token_closure.push_back(node);
+
+    for (auto production : m_productions_map[node])
+    {
+        if (m_nonterminal.find(production[0]) != m_nonterminal.end())
+        {
+            auto re = IndirectLeftRecursionTokenClosure(production[0], token_closure);
+            if (re)
+                return true;
+        }
+    }
+
+    token_closure.pop_back();
+    return false;
 }
 
+/*
+    消除间接左递归
+    不会引入新的 token
+    间接左递归情况比较复杂，有多种可能的循环路径，如:
+    0. 起始非终结符只有一条循环路径
+       A->B->C->D->A
+    1. 起始非终结符有多条路径
+       A->B->C->D->A
+       A->E->F->G->A
+    2. 中间非终结符有多条路径
+       A->B->C->D->A
+       A->B->C->E->A
+    3. 和其他非终结符的循环产生嵌套
+       A->B->C->D->A
+       B->E->F->C
+       B->C->G->H->J->B
+*/
+void M6::LL1Parsing::RemovingIndirectLeftRecursion()
+{
+    // TODO
+}
+
+/*
+    消除直接左递归
+    直接左递归如 E->E+T|T，其只和此产生式左部 E 所推导的产生式(E->E+T,E->T)相关，不涉及其他产生式如 T->F|abD
+    又本类中储存产生式的结构为 map[token] = set{vector1, vector2, ...}, vector = [token1, token2, ...]
+    如 map["E"] = set{vector["E","+","T"], vector["T"]}
+       map["T"] = set{vector["T"], vector["a","b","D"]}
+    故此方法每次分析一个 map 键值对，其他同理循环遍历即可
+    会引入新的 token
+    同时直接左递归情况唯一，一个 A 的对应产生式中最多有且只有一个 A->AX，因为之前会提取左因子，
+    对于 A->AB|AC 这种直接变成 A->AX,X->B|C
+*/
 void M6::LL1Parsing::RemovingDirectLeftRecursion()
 {
+    for (auto &productions : m_productions_map)
+    {
+        auto including_left = std::vector<token>();
+        auto excluding_left = std::set<std::vector<token>>();
 
+        for (auto production : productions.second)
+        {
+            if (production[0] == productions.first)  // 因为提取了左因子，故形如 A->AX 的左递归最多只有一个式子
+                including_left = production;  
+            else
+                excluding_left.insert(production);
+        }
+
+        if (!including_left.size())  // 没有左递归 A->a
+            continue;
+        else if (!excluding_left.size())  // 有左递归，但是没有对应的消除策略 A->Aa
+        {
+            // TODO 无法消除的左递归
+            continue;
+        }
+        else  // 有左递归，同时可以消除 A->AX|a
+        {
+            token new_token = productions.first + L"$";  // A -> A$，用 A$ 表示 A'
+            m_nonterminal.insert(new_token);  // 更新 nonterminal
+
+            m_productions_map[new_token].insert(std::vector<token>{L""});  // A$->ε
+            auto new_production = std::vector<token>();  // 准备 A$->XA$
+            
+            // 把 A->AX 变成 A$->XA$
+            for (auto i = including_left.begin() + 1; i != including_left.end(); ++i)
+                new_production.push_back((*i));
+            new_production.push_back(new_token);
+            m_productions_map[new_token].insert(new_production);
+
+            productions.second.clear();
+
+            // 把 A->aA$ 插入
+            for (auto production : excluding_left)
+            {
+                if (production[0].length() == 0)
+                    production.clear();
+
+                production.push_back(new_token);
+                productions.second.insert(production);
+            }
+        }
+    }
 }
 
 /*
@@ -127,23 +247,22 @@ void M6::LL1Parsing::SimplifyGrammar()
     auto token_closure = std::set<token>();
     TokenClosure(m_start_token, token_closure);
 
-    auto new_productions = std::vector<std::tuple<token, std::vector<token>>>();
     auto new_productions_map = std::map<token, std::set<std::vector<token>>>();
 
-    for (auto i : m_productions)
+    for (auto pronductions : m_productions_map)
     {
-        auto node = std::get<0>(i);
-        if (token_closure.find(node) != token_closure.end())
-        {
-            new_productions.push_back(i);
-            new_productions_map[node] = m_productions_map[node];
-        }
+        if (token_closure.find(pronductions.first) != token_closure.end())
+            new_productions_map[pronductions.first] = m_productions_map[pronductions.first];
     }
 
-    m_productions = new_productions;
     m_productions_map = new_productions_map;
 }
 
+/*
+    获得 token 的闭包结果
+    如 A->abE|dF, B->cD|t, C->e|r, D->ac, E->E+T|T, F->g, T->t|d, nonterminal={"A","E","F","B","D","C","T"}
+    则 "A" 的闭包结果为 {"E","F","T"}，"B" 的闭包结果为 {"B","D"}
+*/
 void M6::LL1Parsing::TokenClosure(token node, std::set<token> &token_closure)
 {
     token_closure.insert(node);
