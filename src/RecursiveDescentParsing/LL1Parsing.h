@@ -18,6 +18,8 @@ namespace M6
         void SetStartToken(token start_token);
         void AddProduction(const token &production_left, const std::vector<token> &production_right);  // 添加一条产生式
         void RunParsing();
+        void GetFirstSSet(std::map<std::tuple<token, std::vector<token>>, std::set<token>> &first_s_set);  // 获取 FIRST_S 集合
+        void GetFollowSet(std::map<token, std::set<token>> &follow_set);  // 获取 FOLLOW 集合
         void GetPredictiveParsingTable(std::map<std::tuple<token, token>,
             std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table);  // 获取预测分析表
         void Clear();  // 清空类中所有成员容器的内部元素

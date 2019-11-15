@@ -1,5 +1,4 @@
 #include "LL1Parsing.h"
-#include <iostream>
 
 M6::LL1Parsing::LL1Parsing()
 {
@@ -33,13 +32,23 @@ void M6::LL1Parsing::RunParsing()
     CalcPredictiveParsingTable();
 }
 
+void M6::LL1Parsing::GetFirstSSet(std::map<std::tuple<token, std::vector<token>>, std::set<token>> &first_s_set)
+{
+    for (auto i : m_first_s_set)
+        first_s_set[i.first] = i.second;
+}
+
+void M6::LL1Parsing::GetFollowSet(std::map<token, std::set<token>> &follow_set)
+{
+    for (auto i : m_follow_set)
+        follow_set[i.first] = i.second;
+}
+
 void M6::LL1Parsing::GetPredictiveParsingTable(std::map<std::tuple<token, token>,
     std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table)
 {
     for (auto i : m_predictive_parsing_table)
-    {
         predictive_parsing_table[i.first] = i.second;
-    }
 }
 
 void M6::LL1Parsing::Clear()
@@ -47,6 +56,7 @@ void M6::LL1Parsing::Clear()
     m_start_token = L"";
     m_nonterminal.clear();
     m_productions.clear();
+    m_productions_map.clear();
     m_nullable.clear();
     m_first_set.clear();
     m_follow_set.clear();
@@ -140,11 +150,10 @@ bool M6::LL1Parsing::IndirectLeftRecursionTokenClosure(token node, std::vector<t
 
     for (auto production : m_productions_map[node])
     {
-        if (m_nonterminal.find(production[0]) != m_nonterminal.end())
+        if (m_nonterminal.find(production[0]) != m_nonterminal.end()
+            && IndirectLeftRecursionTokenClosure(production[0], token_closure))
         {
-            auto re = IndirectLeftRecursionTokenClosure(production[0], token_closure);
-            if (re)
-                return true;
+            return true;
         }
     }
 
@@ -322,6 +331,8 @@ void M6::LL1Parsing::CalcNullable()
             auto flag = true;
             for (auto beta_i : std::get<1>(production))
             {
+                // 遇到终结符，则此产生式的左部符号是不可空的
+                // 遇到非终结符，则判断此非终结符是否可空
                 if (m_nonterminal.find(beta_i) == m_nonterminal.end()
                     || m_nullable[beta_i] == false)
                 {
