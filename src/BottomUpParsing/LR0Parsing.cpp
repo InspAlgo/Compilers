@@ -8,22 +8,22 @@ M6::LR0Parsing::LR0Parsing()
     m_dot = L"\xb7";  // 中文「·」
 }
 
-void M6::LR0Parsing::SetStartToken(token start_token)
+void M6::LR0Parsing::SetStartToken(std::wstring start_token)
 {
     m_start_token = start_token;
 }
 
-void M6::LR0Parsing::SetDot(token dot)
+void M6::LR0Parsing::SetDot(std::wstring dot)
 {
     m_dot = dot;
 }
 
-void M6::LR0Parsing::SetEndOfFile(token end_of_file)
+void M6::LR0Parsing::SetEndOfFile(std::wstring end_of_file)
 {
     m_end_of_file = end_of_file;
 }
 
-void M6::LR0Parsing::AddProduction(const token &production_left, const std::vector<token> &production_right)
+void M6::LR0Parsing::AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right)
 {
     m_productions_map[production_left].insert(production_right);  // 使用集合，防止重复输入
     
@@ -38,6 +38,7 @@ void M6::LR0Parsing::RunParsing()
 {
     Preprocess();
     Building();
+    ReData();
 }
 
 void M6::LR0Parsing::Clear()
@@ -54,9 +55,38 @@ void M6::LR0Parsing::Clear()
     m_action_table.clear();
     m_goto_table.clear();
     m_reduce_state.clear();
+    m_productions.clear();
+    m_productions_map.clear();
+    m_production_index.clear();
+    m_parsing_table.clear();
+    // m_start_item 赋值改变
 }
 
-M6::item_set M6::LR0Parsing::Goto(M6::item_set set, M6::token x)
+void M6::LR0Parsing::GetGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &productions)
+{
+    productions.clear();
+
+}
+
+void M6::LR0Parsing::GetStates(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &states)
+{
+    states.clear();
+    for (auto i : m_state_set)
+    {
+        states.push_back(i);
+    }
+}
+
+void M6::LR0Parsing::GetParsingTable(std::map<std::tuple<int, std::wstring>, std::wstring> &parsing_table)
+{
+    parsing_table.clear();
+    for (auto i : m_parsing_table)
+    {
+        parsing_table[i.first] = i.second;
+    }
+}
+
+M6::LR0Parsing::item_set M6::LR0Parsing::Goto(item_set set, token x)
 {
     auto temp = item_set();
 
@@ -89,7 +119,7 @@ M6::item_set M6::LR0Parsing::Goto(M6::item_set set, M6::token x)
     return temp;
 }
 
-void M6::LR0Parsing::Closure(M6::item_set &set)
+void M6::LR0Parsing::Closure(item_set &set)
 {
     auto is_changing = true;
     auto temp_set = set;  // temp_set 是用来指定遍历的集合，下一轮时 temp_set 重新指向新生成的集合，可以避免重复遍历
@@ -142,7 +172,7 @@ void M6::LR0Parsing::Preprocess()
     auto acc = std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_dot, m_end_of_file });
     m_productions.push_back(std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_end_of_file }));  // 这个是 Accept 状态
     m_production_index[acc] = production_index++;
-
+    
     // 其余在下面代码中合写
 
     /*
@@ -207,7 +237,14 @@ void M6::LR0Parsing::Building()
             auto D = Goto(C, x);
 
             if (!D.size())  // D 为空则说明 C 不能通过 x 转换，故跳过
+            {
+                if (m_nonterminal.find(x) == m_nonterminal.end())
+                    m_action_table[std::make_tuple(m_state_map[C], x)] = -1;  // 标记为负数表示不可转移
+                else
+                    m_goto_table[std::make_tuple(m_state_map[C], x)] = -1;
+
                 continue;
+            }
 
             if (m_state_map.find(D) == m_state_map.end())
             {
@@ -218,13 +255,69 @@ void M6::LR0Parsing::Building()
 
             flag_reduce = false;  // 能够发生转移，说明是非规约态
 
-            if (m_nonterminal.find(x) != m_nonterminal.end())
+            if (m_nonterminal.find(x) == m_nonterminal.end())
                 m_action_table[std::make_tuple(m_state_map[C], x)] = m_state_map[D];
             else
                 m_goto_table[std::make_tuple(m_state_map[C], x)] = m_state_map[D];
         }
 
-        if (flag_reduce)
+        if (flag_reduce)  // 把 Accept state 也包括进来了
             m_reduce_state.insert(m_state_map[C]);
+    }
+}
+
+void M6::LR0Parsing::ReData()
+{
+    for (auto state : m_state_set)
+    {
+        int state_index = m_state_map[state];  // 获取状态索引值，这里的循环是按从小到大的顺序的
+
+        // terminal -- Action 表
+        for (auto t : m_terminal)
+        {
+            std::wstring cell_data = L"";  // 单元格内容
+
+            // 如果不是可规约状态
+            if (m_reduce_state.find(state_index) == m_reduce_state.end())
+            {
+                int next_index = m_action_table[std::make_tuple(state_index, t)];  // 获取可移进到的下一个状态编号
+                cell_data += (next_index < 0 ? L"" : L"s" + std::to_wstring(next_index));
+            }
+            else  // 是可规约状态
+            {
+                int grammar_index = m_production_index[*state.begin()];
+                cell_data += L"r" + std::to_wstring(grammar_index);
+            }
+
+            m_parsing_table[std::make_tuple(state_index, t)] = cell_data;
+        }
+
+        // $ 判断
+        if (m_reduce_state.find(state_index) != m_reduce_state.end())  // 是规约状态
+        {
+            int grammar_index = m_production_index[*state.begin()];
+
+            if (grammar_index)  // 不是 0，说明不是 Accept State
+                m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"r" + std::to_wstring(grammar_index);
+            else
+                m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"acc";
+        }
+        else
+            m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"";
+
+        // nonterminal -- Goto 表
+        for (auto t : m_nonterminal)
+        {
+            std::wstring cell_data = L"";  // 单元格内容
+
+            // 如果不是可规约状态
+            if (m_reduce_state.find(state_index) == m_reduce_state.end())
+            {
+                int next_index = m_goto_table[std::make_tuple(state_index, t)];  // 获取可移进到的下一个状态编号
+                cell_data += (next_index < 0 ? L"" : L"g" + std::to_wstring(next_index));
+            }
+
+            m_parsing_table[std::make_tuple(state_index, t)] = cell_data;
+        }
     }
 }
