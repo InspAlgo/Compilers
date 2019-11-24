@@ -1,11 +1,17 @@
 #include "LR0Parsing.h"
 #include <queue>
 
+int M6::LR0Parsing::StateType::None = 0;
+int M6::LR0Parsing::StateType::Shift = 1 << 1;
+int M6::LR0Parsing::StateType::Reduce = 1 << 2;
+int M6::LR0Parsing::StateType::ShiftReduce = 1 << 3;
+int M6::LR0Parsing::StateType::ReduceReduce = 1 << 4;
+
 M6::LR0Parsing::LR0Parsing()
 {
     m_start_token = L"";
     m_end_of_file = L"$";
-    m_dot = L"\xb7";  // ÖĞÎÄ¡¸¡¤¡¹
+    m_dot = L"\xb7";  // ä¸­æ–‡ã€ŒÂ·ã€
 }
 
 void M6::LR0Parsing::SetStartToken(std::wstring start_token)
@@ -25,7 +31,7 @@ void M6::LR0Parsing::SetEndOfFile(std::wstring end_of_file)
 
 void M6::LR0Parsing::AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right)
 {
-    m_productions_map[production_left].insert(production_right);  // Ê¹ÓÃ¼¯ºÏ£¬·ÀÖ¹ÖØ¸´ÊäÈë
+    m_productions_map[production_left].insert(production_right);  // ä½¿ç”¨é›†åˆï¼Œé˜²æ­¢é‡å¤è¾“å…¥
     
     m_nonterminal.insert(production_left);
     
@@ -44,8 +50,6 @@ void M6::LR0Parsing::RunParsing()
 void M6::LR0Parsing::Clear()
 {
     m_start_token = L"";
-    m_end_of_file = L"$";
-    m_dot = L"\xb7";  // ÖĞÎÄ¡¸¡¤¡¹
     m_nonterminal.clear();
     m_terminal.clear();
     m_nt.clear();
@@ -54,33 +58,50 @@ void M6::LR0Parsing::Clear()
     m_state_set.clear();
     m_action_table.clear();
     m_goto_table.clear();
-    m_reduce_state.clear();
+    m_state_type.clear();
     m_productions.clear();
     m_productions_map.clear();
     m_production_index.clear();
     m_parsing_table.clear();
-    // m_start_item ¸³Öµ¸Ä±ä
+    // m_start_item èµ‹å€¼æ”¹å˜
 }
 
 void M6::LR0Parsing::GetGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &productions)
 {
     productions.clear();
 
+    for (auto &i : m_productions)
+    {
+        productions.push_back(i);
+    }
 }
 
 void M6::LR0Parsing::GetStates(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &states)
 {
     states.clear();
-    for (auto i : m_state_set)
+    for (auto &i : m_state_set)
     {
         states.push_back(i);
     }
 }
 
+void M6::LR0Parsing::GetColumnsHeader(std::vector<std::wstring> &columns_header)
+{
+    columns_header.clear();
+
+    for (auto i : m_terminal)
+        columns_header.push_back(i);
+
+    columns_header.push_back(m_end_of_file);
+
+    for (auto i : m_nonterminal)
+        columns_header.push_back(i);
+}
+
 void M6::LR0Parsing::GetParsingTable(std::map<std::tuple<int, std::wstring>, std::wstring> &parsing_table)
 {
     parsing_table.clear();
-    for (auto i : m_parsing_table)
+    for (auto &i : m_parsing_table)
     {
         parsing_table[i.first] = i.second;
     }
@@ -90,17 +111,17 @@ M6::LR0Parsing::item_set M6::LR0Parsing::Goto(item_set set, token x)
 {
     auto temp = item_set();
 
-    for (auto item_i : set)  // ¶ÔÏîÄ¿¼¯ÖĞÃ¿Ò»¸öÏîÄ¿
+    for (auto item_i : set)  // å¯¹é¡¹ç›®é›†ä¸­æ¯ä¸€ä¸ªé¡¹ç›®
     {
-        // µãºÅºóÃæÊÇ·ÇÖÕ½á·û£¬Ìí¼ÓÆä´øµãºÅµÄÍØÕ¹²úÉúÊ½
+        // ç‚¹å·åé¢æ˜¯éç»ˆç»“ç¬¦ï¼Œæ·»åŠ å…¶å¸¦ç‚¹å·çš„æ‹“å±•äº§ç”Ÿå¼
         auto item = std::get<1>(item_i);
         for (int i = 0, size = item.size(); i < size; i++)
         {
-            if (i == size - 1 || item[i + 1] == m_end_of_file)  // µãºÅ²»ÄÜÊÇ×îºóÒ»¸ö token£¬ÇÒÏÂÒ»¸ö²»ÄÜÊÇ $
+            if (i == size - 1 || item[i + 1] == m_end_of_file)  // ç‚¹å·ä¸èƒ½æ˜¯æœ€åä¸€ä¸ª tokenï¼Œä¸”ä¸‹ä¸€ä¸ªä¸èƒ½æ˜¯ $
                 break;
-            if (item[i] != m_dot)  // Ñ°ÕÒµãºÅÎ»ÖÃ
+            if (item[i] != m_dot)  // å¯»æ‰¾ç‚¹å·ä½ç½®
                 continue;
-            if (item[i + 1] != x)  // µãºÅºóÃæ±ØĞëÊÇ x£¬·ñÔò²»ÄÜ¾­¹ı x ½øĞĞ×ª»»
+            if (item[i + 1] != x)  // ç‚¹å·åé¢å¿…é¡»æ˜¯ xï¼Œå¦åˆ™ä¸èƒ½ç»è¿‡ x è¿›è¡Œè½¬æ¢
                 break;
             
             auto new_item = std::vector<token>();
@@ -122,24 +143,24 @@ M6::LR0Parsing::item_set M6::LR0Parsing::Goto(item_set set, token x)
 void M6::LR0Parsing::Closure(item_set &set)
 {
     auto is_changing = true;
-    auto temp_set = set;  // temp_set ÊÇÓÃÀ´Ö¸¶¨±éÀúµÄ¼¯ºÏ£¬ÏÂÒ»ÂÖÊ± temp_set ÖØĞÂÖ¸ÏòĞÂÉú³ÉµÄ¼¯ºÏ£¬¿ÉÒÔ±ÜÃâÖØ¸´±éÀú
+    auto temp_set = set;  // temp_set æ˜¯ç”¨æ¥æŒ‡å®šéå†çš„é›†åˆï¼Œä¸‹ä¸€è½®æ—¶ temp_set é‡æ–°æŒ‡å‘æ–°ç”Ÿæˆçš„é›†åˆï¼Œå¯ä»¥é¿å…é‡å¤éå†
     while (is_changing)
     {
         auto set_size = set.size();
         auto new_set = item_set();
 
-        for (auto item_i : temp_set)  // ¶ÔÏîÄ¿¼¯ÖĞÃ¿Ò»¸öÏîÄ¿
+        for (auto item_i : temp_set)  // å¯¹é¡¹ç›®é›†ä¸­æ¯ä¸€ä¸ªé¡¹ç›®
         {
-            // µãºÅºóÃæÊÇ·ÇÖÕ½á·û£¬Ìí¼ÓÆä´øµãºÅµÄÍØÕ¹²úÉúÊ½
+            // ç‚¹å·åé¢æ˜¯éç»ˆç»“ç¬¦ï¼Œæ·»åŠ å…¶å¸¦ç‚¹å·çš„æ‹“å±•äº§ç”Ÿå¼
             auto item = std::get<1>(item_i);
 
             for (int i = 0, size = item.size(); i < size; i++)
             {
-                if (i == size - 1 || item[i + 1] == m_end_of_file)  // µãºÅ²»ÄÜÊÇ×îºóÒ»¸ö token£¬ÇÒÏÂÒ»¸ö²»ÄÜÊÇ $
+                if (i == size - 1 || item[i + 1] == m_end_of_file)  // ç‚¹å·ä¸èƒ½æ˜¯æœ€åä¸€ä¸ª tokenï¼Œä¸”ä¸‹ä¸€ä¸ªä¸èƒ½æ˜¯ $
                     break;
                 if (item[i] != m_dot)
                     continue;
-                if (m_nonterminal.find(item[i + 1]) == m_nonterminal.end())  // µãºÅºó²»ÊÇ·ÇÖÕ½á·û
+                if (m_nonterminal.find(item[i + 1]) == m_nonterminal.end())  // ç‚¹å·åä¸æ˜¯éç»ˆç»“ç¬¦
                     break;
 
                 auto temp = m_items_start[item[i + 1]];
@@ -157,7 +178,7 @@ void M6::LR0Parsing::Closure(item_set &set)
 void M6::LR0Parsing::Preprocess()
 {
     /*
-        Çó terminal
+        æ±‚ terminal
     */
     for (auto i : m_nt)
     {
@@ -166,25 +187,25 @@ void M6::LR0Parsing::Preprocess()
     }
 
     /*
-        ½«ËùÓĞ²úÉúÊ½ÒÔ vector ÁĞ³ö£¬²¢¸ø³öÔÚ¹æÔ¼×´Ì¬ÏÂµÄ±àºÅ
+        å°†æ‰€æœ‰äº§ç”Ÿå¼ä»¥ vector åˆ—å‡ºï¼Œå¹¶ç»™å‡ºåœ¨è§„çº¦çŠ¶æ€ä¸‹çš„ç¼–å·
     */
     int production_index = 0;
     auto acc = std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_dot, m_end_of_file });
-    m_productions.push_back(std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_end_of_file }));  // Õâ¸öÊÇ Accept ×´Ì¬
+    m_productions.push_back(std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_end_of_file }));  // è¿™ä¸ªæ˜¯ Accept çŠ¶æ€
     m_production_index[acc] = production_index++;
     
-    // ÆäÓàÔÚÏÂÃæ´úÂëÖĞºÏĞ´
+    // å…¶ä½™åœ¨ä¸‹é¢ä»£ç ä¸­åˆå†™
 
     /*
-        ÆğÊ¼ÏîÄ¿ S'->.S$
+        èµ·å§‹é¡¹ç›® S'->.S$
     */
     m_start_item = std::make_tuple(m_start_token + L"'", 
         std::vector<token>{ m_dot, m_start_token, m_end_of_file });
 
     /*
-        ·ÇÖÕ½á·û¶ÔÓ¦²úÉúÊ½µÄËùÓĞÏîÄ¿³õÊ¼¼¯ºÏ
-        Èç S->AB|aC|dB£¬Ôò m_items_start[S] = { [.AB], [.aC], [.dB] }
-           A->ab|dF£¬Ôò m_items_start[A] = { [.ab], [.dF] }
+        éç»ˆç»“ç¬¦å¯¹åº”äº§ç”Ÿå¼çš„æ‰€æœ‰é¡¹ç›®åˆå§‹é›†åˆ
+        å¦‚ S->AB|aC|dBï¼Œåˆ™ m_items_start[S] = { [.AB], [.aC], [.dB] }
+           A->ab|dFï¼Œåˆ™ m_items_start[A] = { [.ab], [.dF] }
     */
     for (auto productions : m_productions_map)
     {
@@ -220,6 +241,7 @@ void M6::LR0Parsing::Building()
 
     int count = 0;
     m_state_set.push_back(C0);
+    m_state_type.push_back(StateType::None);
     m_state_map[C0] = count++;
 
     auto Q = std::queue<item_set>();
@@ -230,18 +252,19 @@ void M6::LR0Parsing::Building()
         auto C = Q.front();
         Q.pop();
         
-        auto flag_reduce = true;
+        auto flag_shift = false;  // å‡è®¾ä¸å¯ç§»è¿›
+        int index_C = m_state_map[C];
 
         for (auto x : m_nt)
         {
             auto D = Goto(C, x);
 
-            if (!D.size())  // D Îª¿ÕÔòËµÃ÷ C ²»ÄÜÍ¨¹ı x ×ª»»£¬¹ÊÌø¹ı
+            if (!D.size())  // D ä¸ºç©ºåˆ™è¯´æ˜ C ä¸èƒ½é€šè¿‡ x è½¬æ¢ï¼Œæ•…è·³è¿‡
             {
                 if (m_nonterminal.find(x) == m_nonterminal.end())
-                    m_action_table[std::make_tuple(m_state_map[C], x)] = -1;  // ±ê¼ÇÎª¸ºÊı±íÊ¾²»¿É×ªÒÆ
+                    m_action_table[std::make_tuple(index_C, x)] = -1;  // æ ‡è®°ä¸ºè´Ÿæ•°è¡¨ç¤ºä¸å¯è½¬ç§»
                 else
-                    m_goto_table[std::make_tuple(m_state_map[C], x)] = -1;
+                    m_goto_table[std::make_tuple(index_C, x)] = -1;
 
                 continue;
             }
@@ -249,20 +272,49 @@ void M6::LR0Parsing::Building()
             if (m_state_map.find(D) == m_state_map.end())
             {
                 m_state_set.push_back(D);
+                m_state_type.push_back(StateType::None);
                 m_state_map[D] = count++;
                 Q.push(D);
             }
 
-            flag_reduce = false;  // ÄÜ¹»·¢Éú×ªÒÆ£¬ËµÃ÷ÊÇ·Ç¹æÔ¼Ì¬
+            flag_shift = true;  // èƒ½å¤Ÿå‘ç”Ÿç§»è¿›
 
             if (m_nonterminal.find(x) == m_nonterminal.end())
-                m_action_table[std::make_tuple(m_state_map[C], x)] = m_state_map[D];
+                m_action_table[std::make_tuple(index_C, x)] = m_state_map[D];
             else
-                m_goto_table[std::make_tuple(m_state_map[C], x)] = m_state_map[D];
+                m_goto_table[std::make_tuple(index_C, x)] = m_state_map[D];
         }
 
-        if (flag_reduce)  // °Ñ Accept state Ò²°üÀ¨½øÀ´ÁË
-            m_reduce_state.insert(m_state_map[C]);
+        if (flag_shift)  // å¯å‘ç”Ÿç§»è¿›åŠ¨ä½œ
+        {
+            m_state_type[index_C] |= StateType::Shift;
+            int reduce_count = 0;  // å¯è§„çº¦çš„é¡¹ç›®æ•°é‡
+
+            // åˆ¤æ–­æ˜¯å¦å«æœ‰è§„çº¦åŠ¨ä½œ
+            for (auto i : m_production_index)
+            {
+                if (C.find(i.first) == C.end())
+                    reduce_count++;
+            }
+
+            if (reduce_count)  // å«æœ‰è§„çº¦åŠ¨ä½œ
+            {
+                m_state_type[index_C] |= StateType::Reduce;
+                m_state_type[index_C] |= StateType::ShiftReduce;
+            }
+
+            if (reduce_count > 1)  // å«æœ‰å¤šä¸ªè§„çº¦åŠ¨ä½œ
+            {
+                m_state_type[index_C] |= StateType::ReduceReduce;
+            }
+
+        }
+        else  // åªæœ‰è§„çº¦åŠ¨ä½œ
+        {
+            m_state_type[index_C] |= StateType::Reduce;
+            if (C.size() > 1)  // å«æœ‰å¤šä¸ªè§„çº¦åŠ¨ä½œ
+                m_state_type[index_C] |= StateType::ReduceReduce;
+        }
     }
 }
 
@@ -270,50 +322,78 @@ void M6::LR0Parsing::ReData()
 {
     for (auto state : m_state_set)
     {
-        int state_index = m_state_map[state];  // »ñÈ¡×´Ì¬Ë÷ÒıÖµ£¬ÕâÀïµÄÑ­»·ÊÇ°´´ÓĞ¡µ½´óµÄË³ĞòµÄ
+        int state_index = m_state_map[state];  // è·å–çŠ¶æ€ç´¢å¼•å€¼ï¼Œè¿™é‡Œçš„å¾ªç¯æ˜¯æŒ‰ä»å°åˆ°å¤§çš„é¡ºåºçš„
 
-        // terminal -- Action ±í
+        // terminal -- Action è¡¨
         for (auto t : m_terminal)
         {
-            std::wstring cell_data = L"";  // µ¥Ôª¸ñÄÚÈİ
+            std::wstring cell_data = L"";  // å•å…ƒæ ¼å†…å®¹
 
-            // Èç¹û²»ÊÇ¿É¹æÔ¼×´Ì¬
-            if (m_reduce_state.find(state_index) == m_reduce_state.end())
+            // å¦‚æœæ˜¯ç§»è¿›åŠ¨ä½œ
+            if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Shift))
             {
-                int next_index = m_action_table[std::make_tuple(state_index, t)];  // »ñÈ¡¿ÉÒÆ½øµ½µÄÏÂÒ»¸ö×´Ì¬±àºÅ
+                int next_index = m_action_table[std::make_tuple(state_index, t)];  // è·å–å¯ç§»è¿›åˆ°çš„ä¸‹ä¸€ä¸ªçŠ¶æ€ç¼–å·
                 cell_data += (next_index < 0 ? L"" : L"s" + std::to_wstring(next_index));
             }
-            else  // ÊÇ¿É¹æÔ¼×´Ì¬
+
+            // å¦‚æœæ˜¯è§„çº¦åŠ¨ä½œ
+            if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Reduce))
             {
-                int grammar_index = m_production_index[*state.begin()];
-                cell_data += L"r" + std::to_wstring(grammar_index);
+                for (auto i : state)  // è·å–æ‰€æœ‰é¡¹ç›®
+                {
+                    if (m_production_index.find(i) != m_production_index.end())
+                    {
+                        int grammar_index = m_production_index[i];
+                        cell_data += L"r" + std::to_wstring(grammar_index);
+                    }
+                }
             }
 
             m_parsing_table[std::make_tuple(state_index, t)] = cell_data;
         }
 
-        // $ ÅĞ¶Ï
-        if (m_reduce_state.find(state_index) != m_reduce_state.end())  // ÊÇ¹æÔ¼×´Ì¬
+        // $ åˆ¤æ–­
+        if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Reduce))  // åªæœ‰è§„çº¦çŠ¶æ€
         {
-            int grammar_index = m_production_index[*state.begin()];
-
-            if (grammar_index)  // ²»ÊÇ 0£¬ËµÃ÷²»ÊÇ Accept State
-                m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"r" + std::to_wstring(grammar_index);
+            if (state.size() > 1)
+            {
+                std::wstring cell_data = L"";
+                for (auto i : state)  // è·å–æ‰€æœ‰é¡¹ç›®
+                {
+                    if (m_production_index.find(i) != m_production_index.end())
+                    {
+                        int grammar_index = m_production_index[i];
+                        cell_data += L"r" + std::to_wstring(grammar_index);
+                    }
+                }
+                m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = cell_data;
+            }
             else
-                m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"acc";
+            {
+                int grammar_index = m_production_index[*state.begin()];
+
+                if (grammar_index)  // ä¸æ˜¯ 0ï¼Œè¯´æ˜ä¸æ˜¯ Accept State
+                    m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"r" + std::to_wstring(grammar_index);
+                else
+                {
+                    m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"acc";
+                    for (auto i : m_terminal)
+                        m_parsing_table[std::make_tuple(state_index, i)] = L"";
+                }
+            }
         }
         else
             m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"";
 
-        // nonterminal -- Goto ±í
+        // nonterminal -- Goto è¡¨
         for (auto t : m_nonterminal)
         {
-            std::wstring cell_data = L"";  // µ¥Ôª¸ñÄÚÈİ
+            std::wstring cell_data = L"";  // å•å…ƒæ ¼å†…å®¹
 
-            // Èç¹û²»ÊÇ¿É¹æÔ¼×´Ì¬
-            if (m_reduce_state.find(state_index) == m_reduce_state.end())
+            // å¦‚æœæ˜¯ç§»è¿›åŠ¨ä½œ
+            if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Shift))
             {
-                int next_index = m_goto_table[std::make_tuple(state_index, t)];  // »ñÈ¡¿ÉÒÆ½øµ½µÄÏÂÒ»¸ö×´Ì¬±àºÅ
+                int next_index = m_goto_table[std::make_tuple(state_index, t)];  // è·å–å¯ç§»è¿›åˆ°çš„ä¸‹ä¸€ä¸ªçŠ¶æ€ç¼–å·
                 cell_data += (next_index < 0 ? L"" : L"g" + std::to_wstring(next_index));
             }
 

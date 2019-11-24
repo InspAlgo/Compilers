@@ -18,36 +18,48 @@ namespace M6
         void SetStartToken(std::wstring start_token);
         void SetDot(std::wstring dot);
         void SetEndOfFile(std::wstring end_of_file);
-        void AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right);  // Ìí¼ÓÒ»Ìõ²úÉúÊ½
+        void AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right);  // æ·»åŠ ä¸€æ¡äº§ç”Ÿå¼
         void RunParsing();
         void Clear();
-        void GetGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &productions); // »ñÈ¡ÍØÕ¹ÎÄ·¨£¬Ö÷Òª¾ÍÊÇÔö¼ÓÁËÒ»¸ö S'->S$
-        void GetStates(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &states);  // »ñÈ¡ËùÓĞ×´Ì¬
-        void GetParsingTable(std::map<std::tuple<int, std::wstring>, std::wstring> &parsing_table);  // »ñÈ¡·ÖÎö±í
+        void GetGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &productions); // è·å–æ‹“å±•æ–‡æ³•ï¼Œä¸»è¦å°±æ˜¯å¢åŠ äº†ä¸€ä¸ª S'->S$
+        void GetStates(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &states);  // è·å–æ‰€æœ‰çŠ¶æ€
+        void GetColumnsHeader(std::vector<std::wstring> &columns_header);  // åˆ†æè¡¨åˆ—è¡¨å¤´
+        void GetParsingTable(std::map<std::tuple<int, std::wstring>, std::wstring> &parsing_table);  // è·å–åˆ†æè¡¨
+
+    public:
+        class StateType
+        {
+        public:
+            static int None;  // æ— ç±»å‹ 0
+            static int Shift;  // ç§»è¿› 1<<1
+            static int Reduce;  // è§„çº¦ 1<<2
+            static int ShiftReduce;  // ç§»è¿›-è§„çº¦å†²çª 1<<3
+            static int ReduceReduce;  // è§„çº¦-è§„çº¦å†²çª 1<<4
+        };
 
     private:
-        void Preprocess();  // Ò»Ğ©Ô¤´¦Àí²¿·Ö
-        void Building();  // LR0 ·ÖÎö±í¹¹½¨
-        item_set Goto(item_set set, token x);  // ·µ»ØÏîÄ¿¼¯ set ¾­¹ı x ×ª»»ºóµÄÏîÄ¿¼¯
-        void Closure(item_set &set);  // ÇóÏîÄ¿¼¯ set µÄ±Õ°ü£¬Ö÷ÒªÊÇÕë¶ÔÏîÄ¿¼¯ÖĞ»¹°üº¬ A->a.B ÕâÖÖÏîÄ¿µÄÇé¿ö
-        void ReData();  // ÓÃÀ´×¼±¸Ò»Ğ©·µ»ØÊı¾İ£¬ÒÔ±ã Get º¯Êıµ÷ÓÃ»ñÈ¡
+        void Preprocess();  // ä¸€äº›é¢„å¤„ç†éƒ¨åˆ†
+        void Building();  // LR0 åˆ†æè¡¨æ„å»º
+        item_set Goto(item_set set, token x);  // è¿”å›é¡¹ç›®é›† set ç»è¿‡ x è½¬æ¢åçš„é¡¹ç›®é›†
+        void Closure(item_set &set);  // æ±‚é¡¹ç›®é›† set çš„é—­åŒ…ï¼Œä¸»è¦æ˜¯é’ˆå¯¹é¡¹ç›®é›†ä¸­è¿˜åŒ…å« A->a.B è¿™ç§é¡¹ç›®çš„æƒ…å†µ
+        void ReData();  // ç”¨æ¥å‡†å¤‡ä¸€äº›è¿”å›æ•°æ®ï¼Œä»¥ä¾¿ Get å‡½æ•°è°ƒç”¨è·å–
 
-        token m_dot;  // µãºÅ£¬Ä¬ÈÏÊ¹ÓÃÖĞÎÄµÄ¡¤·ûºÅ±íÊ¾
-        token m_start_token;  // ÆğÊ¼·ÇÖÕ½á·û
-        token m_end_of_file;  // ½áÊø·û£¬¹úÄÚ²¿·Ö½Ì²ÄÊ¹ÓÃ #£¬¹úÍâÊ¹ÓÃ $£¬Ä¬ÈÏÊ¹ÓÃ $
-        std::tuple<token, std::vector<token>> m_start_item;  // ÆğÊ¼ÏîÄ¿ S'->.S$
-        std::set<token> m_nonterminal;  // ·ÇÖÕ½á·û¼¯ºÏ
-        std::set<token> m_terminal;  // ÖÕ½á·û¼¯ºÏ
-        std::set<token> m_nt;  // ·ÇÖÕ½á·ûºÍÖÕ½á·û¼¯ºÏ
-        std::vector<std::tuple<token, std::vector<token>>> m_productions;  // ÍØÕ¹ÎÄ·¨±í
-        std::map<std::tuple<token, std::vector<token>>, int> m_production_index;
-        std::map<token, std::set<std::vector<token>>> m_productions_map;
-        std::map<token, item_set> m_items_start;  // ·ÇÖÕ½á·û token ¶ÔÓ¦²úÉúÊ½µÄËùÓĞÏîÄ¿³õÊ¼¼¯ºÏ
-        std::map<item_set, int> m_state_map;  // state ±í
-        std::vector<item_set> m_state_set;  // state ¼¯£¬ÒÔ vector Ë³Ğò´æ´¢£¬·½±ãË÷Òı
-        std::map<std::tuple<int, token>, int> m_action_table;  // action ±í
-        std::map<std::tuple<int, token>, int> m_goto_table;  // goto ±í
-        std::set<int> m_reduce_state;  // // ÓÃÀ´ÅĞ¶ÏÊÇ·ñÊÇ¹æÔ¼Ì¬£¬Èç¹û²»ÊÇ¹æÔ¼Ì¬£¬Ôò»á·¢Éú×ªÒÆ
-        std::map<std::tuple<int, token>, std::wstring> m_parsing_table;  // ·µ»ØÓÃÓÚ½çÃæÏÔÊ¾µÄ·ÖÎö±í
+        token m_dot;  // ç‚¹å·ï¼Œé»˜è®¤ä½¿ç”¨ä¸­æ–‡çš„Â·ç¬¦å·è¡¨ç¤º
+        token m_start_token;  // èµ·å§‹éç»ˆç»“ç¬¦
+        token m_end_of_file;  // ç»“æŸç¬¦ï¼Œå›½å†…éƒ¨åˆ†æ•™æä½¿ç”¨ #ï¼Œå›½å¤–ä½¿ç”¨ $ï¼Œé»˜è®¤ä½¿ç”¨ $
+        std::tuple<token, std::vector<token>> m_start_item;  // èµ·å§‹é¡¹ç›® S'->.S$
+        std::set<token> m_nonterminal;  // éç»ˆç»“ç¬¦é›†åˆ
+        std::set<token> m_terminal;  // ç»ˆç»“ç¬¦é›†åˆ
+        std::set<token> m_nt;  // éç»ˆç»“ç¬¦å’Œç»ˆç»“ç¬¦é›†åˆ
+        std::vector<std::tuple<token, std::vector<token>>> m_productions;  // æ‹“å±•æ–‡æ³•è¡¨
+        std::map<std::tuple<token, std::vector<token>>, int> m_production_index;  // å¯è§„çº¦é¡¹ç›®è¡¨
+        std::map<token, std::set<std::vector<token>>> m_productions_map;  // è¾“å…¥çš„æ‰€æœ‰äº§ç”Ÿå¼ï¼Œå³æ–‡æ³•
+        std::map<token, item_set> m_items_start;  // éç»ˆç»“ç¬¦ token å¯¹åº”äº§ç”Ÿå¼çš„æ‰€æœ‰é¡¹ç›®åˆå§‹é›†åˆ
+        std::map<item_set, int> m_state_map;  // state è¡¨
+        std::vector<item_set> m_state_set;  // state é›†ï¼Œä»¥ vector é¡ºåºå­˜å‚¨ï¼Œæ–¹ä¾¿ç´¢å¼•
+        std::vector<int> m_state_type;  // state é›†ç±»å‹ï¼Œ0-æ— ç±»å‹; 1<<1 - ç§»è¿›, 1<<2 - è§„çº¦
+        std::map<std::tuple<int, token>, int> m_action_table;  // action è¡¨
+        std::map<std::tuple<int, token>, int> m_goto_table;  // goto è¡¨
+        std::map<std::tuple<int, token>, std::wstring> m_parsing_table;  // è¿”å›ç”¨äºç•Œé¢æ˜¾ç¤ºçš„åˆ†æè¡¨
     };
 }
