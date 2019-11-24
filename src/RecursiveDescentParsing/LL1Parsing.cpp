@@ -16,7 +16,7 @@ void M6::LL1Parsing::SetStartToken(token start_token)
 void M6::LL1Parsing::AddProduction(const token &production_left, const std::vector<token> &production_right)
 {
     // 这里不用进 m_productions 因为后面 CheckGrammar 阶段会重新进
-    m_productions_map[production_left].insert(production_right);  // 使用集合，防止重复输入
+    m_productions_map[production_left].insert(production_right); // 使用集合，防止重复输入
     m_nonterminal.insert(production_left);
     m_first_s_set[std::make_tuple(production_left, production_right)] = std::set<token>();
 }
@@ -47,7 +47,8 @@ void M6::LL1Parsing::GetFollowSet(std::map<token, std::set<token>> &follow_set, 
 }
 
 void M6::LL1Parsing::GetPredictiveParsingTable(std::map<std::tuple<token, token>,
-    std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table, bool sharp)
+                                                        std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table,
+                                               bool sharp)
 {
     auto table = sharp ? m_predictive_parsing_table_sharp : m_predictive_parsing_table;
     for (auto i : table)
@@ -116,8 +117,8 @@ void M6::LL1Parsing::CheckGrammar()
         for (auto production : productions.second)
         {
             m_productions.push_back(std::make_tuple(productions.first, production));
-            for (auto t : production)  // 遍历每个产生式从而得到所有终结符，但此时是包含有部分非终结符的
-                if (t.length() > 0)  // 不包含 epsilon
+            for (auto t : production) // 遍历每个产生式从而得到所有终结符，但此时是包含有部分非终结符的
+                if (t.length() > 0)   // 不包含 epsilon
                     terminal.insert(t);
         }
     }
@@ -134,7 +135,7 @@ void M6::LL1Parsing::ExtractLeftFactoring()
 {
     for (auto &productions : m_productions_map)
     {
-        TokenNode* head = new TokenNode(productions.first);
+        TokenNode *head = new TokenNode(productions.first);
 
         // 构建公共前缀树(字典树)
         for (auto production : productions.second)
@@ -184,8 +185,7 @@ bool M6::LL1Parsing::IndirectLeftRecursionTokenClosure(token node, std::vector<t
 
     for (auto production : m_productions_map[node])
     {
-        if (m_nonterminal.find(production[0]) != m_nonterminal.end()
-            && IndirectLeftRecursionTokenClosure(production[0], token_closure))
+        if (m_nonterminal.find(production[0]) != m_nonterminal.end() && IndirectLeftRecursionTokenClosure(production[0], token_closure))
         {
             return true;
         }
@@ -237,26 +237,26 @@ void M6::LL1Parsing::RemovingDirectLeftRecursion()
 
         for (auto production : productions.second)
         {
-            if (production[0] == productions.first)  // 因为提取了左因子，故形如 A->AX 的左递归最多只有一个式子
+            if (production[0] == productions.first) // 因为提取了左因子，故形如 A->AX 的左递归最多只有一个式子
                 including_left = production;
             else
                 excluding_left.insert(production);
         }
 
-        if (!including_left.size())  // 没有左递归 A->a
+        if (!including_left.size()) // 没有左递归 A->a
             continue;
-        else if (!excluding_left.size())  // 有左递归，但是没有对应的消除策略 A->Aa
+        else if (!excluding_left.size()) // 有左递归，但是没有对应的消除策略 A->Aa
         {
             // TODO 无法消除的左递归
             continue;
         }
-        else  // 有左递归，同时可以消除 A->AX|a
+        else // 有左递归，同时可以消除 A->AX|a
         {
-            token new_token = productions.first + L"$";  // A -> A$，用 A$ 表示 A'
-            m_nonterminal.insert(new_token);  // 更新 nonterminal
+            token new_token = productions.first + L"$"; // A -> A$，用 A$ 表示 A'
+            m_nonterminal.insert(new_token);            // 更新 nonterminal
 
-            m_productions_map[new_token].insert(std::vector<token>{L""});  // A$->ε
-            auto new_production = std::vector<token>();  // 准备 A$->XA$
+            m_productions_map[new_token].insert(std::vector<token>{L""}); // A$->ε
+            auto new_production = std::vector<token>();                   // 准备 A$->XA$
 
             // 把 A->AX 变成 A$->XA$
             for (auto i = including_left.begin() + 1; i != including_left.end(); ++i)
@@ -314,12 +314,11 @@ void M6::LL1Parsing::TokenClosure(token node, std::set<token> &token_closure)
     {
         for (auto i : production)
         {
-            if (i.length() == 0)  // 跳过推导为 ε 的产生式
+            if (i.length() == 0) // 跳过推导为 ε 的产生式
                 break;
 
             // 非终结符且不在闭包集合中
-            if (m_nonterminal.find(i) != m_nonterminal.end()
-                && token_closure.find(i) == token_closure.end())
+            if (m_nonterminal.find(i) != m_nonterminal.end() && token_closure.find(i) == token_closure.end())
             {
                 TokenClosure(i, token_closure);
             }
@@ -344,7 +343,7 @@ void M6::LL1Parsing::InitSet()
 
 void M6::LL1Parsing::CalcNullable()
 {
-    auto is_changing = true;  // 标记 nullable 在一轮迭代中是否发生改变
+    auto is_changing = true; // 标记 nullable 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
@@ -369,8 +368,7 @@ void M6::LL1Parsing::CalcNullable()
             {
                 // 遇到终结符，则此产生式的左部符号是不可空的
                 // 遇到非终结符，则判断此非终结符是否可空
-                if (m_nonterminal.find(beta_i) == m_nonterminal.end()
-                    || m_nullable[beta_i] == false)
+                if (m_nonterminal.find(beta_i) == m_nonterminal.end() || m_nullable[beta_i] == false)
                 {
                     flag = false;
                     break;
@@ -387,7 +385,7 @@ void M6::LL1Parsing::CalcNullable()
 
 void M6::LL1Parsing::CalcFirstSet()
 {
-    auto is_changing = true;  // 标记 FIRST 在一轮迭代中是否发生改变
+    auto is_changing = true; // 标记 FIRST 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
@@ -423,7 +421,7 @@ void M6::LL1Parsing::CalcFirstSet()
 void M6::LL1Parsing::CalcFollowSet()
 {
     // 不包含句子的右界符 # 的 FOLLOW
-    auto is_changing = true;  // 标记 FOLLOW 在一轮迭代中是否发生改变
+    auto is_changing = true; // 标记 FOLLOW 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
@@ -466,7 +464,7 @@ void M6::LL1Parsing::CalcFollowSet()
     }
 
     // 包含句子的右界符 # 的 FOLLOW 集合
-    is_changing = true;  // 标记 FOLLOW 在一轮迭代中是否发生改变
+    is_changing = true; // 标记 FOLLOW 在一轮迭代中是否发生改变
     m_follow_sharp_set[m_start_token].insert(L"#");
     while (is_changing)
     {
@@ -519,7 +517,7 @@ void M6::LL1Parsing::CalcFirstSSet()
 
         for (auto beta_i : std::get<1>(production))
         {
-            if (beta_i.length() == 0)  // 右部是 ε 则跳过
+            if (beta_i.length() == 0) // 右部是 ε 则跳过
                 continue;
 
             if (m_nonterminal.find(beta_i) == m_nonterminal.end())
@@ -553,7 +551,7 @@ void M6::LL1Parsing::CalcFirstSSet()
 
         for (auto beta_i : std::get<1>(production))
         {
-            if (beta_i.length() == 0)  // 右部是 ε 则跳过
+            if (beta_i.length() == 0) // 右部是 ε 则跳过
                 continue;
 
             if (m_nonterminal.find(beta_i) == m_nonterminal.end())
@@ -696,20 +694,20 @@ void M6::LL1Parsing::TokenNode::AddDifferentNodes(std::vector<token> &production
             m_left_ptr->AddDifferentNodes(production, idx + 1);
             return;
         }
-        else  // 有子结点
+        else // 有子结点
         {
             m_left_ptr->AddDifferentNodes(production, idx + 1);
             return;
         }
     }
-    else  // 与本结点值不同
+    else // 与本结点值不同
     {
         // 进入兄弟结点找
         for (auto ptr = m_right_ptr; ptr != nullptr; ptr = ptr->m_right_ptr)
         {
-            if (ptr->m_token == production[idx])  // 发现相同
+            if (ptr->m_token == production[idx]) // 发现相同
             {
-                ptr->AddDifferentNodes(production, idx);  // 兄弟结点位于同一层次，故 idx 不变
+                ptr->AddDifferentNodes(production, idx); // 兄弟结点位于同一层次，故 idx 不变
                 return;
             }
         }
@@ -780,9 +778,9 @@ void M6::LL1Parsing::TokenNode::DestroyChildNodes()
     不同的兄弟结点说明是有不同的 vector，故用 idx 进行区分
 */
 void M6::LL1Parsing::TokenNode::CreateNewProductions(token production_left, int idx,
-    std::map<std::tuple<token, int>, std::vector<token>> &productions_map)
+                                                     std::map<std::tuple<token, int>, std::vector<token>> &productions_map)
 {
-    if (idx == -1)  // 单独处理根结点
+    if (idx == -1) // 单独处理根结点
     {
         m_left_ptr->CreateNewProductions(production_left, idx + 1, productions_map);
         return;
