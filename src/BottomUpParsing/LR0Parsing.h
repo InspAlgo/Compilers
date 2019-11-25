@@ -30,11 +30,11 @@ namespace M6
         class StateType
         {
         public:
-            static int None;  // 无类型 0
-            static int Shift;  // 移进 1<<1
-            static int Reduce;  // 规约 1<<2
-            static int ShiftReduce;  // 移进-规约冲突 1<<3
-            static int ReduceReduce;  // 规约-规约冲突 1<<4
+            static const int None;  // 无类型 0
+            static const int Shift;  // 移进 1<<1
+            static const int Reduce;  // 规约 1<<2
+            static const int ShiftReduce;  // 移进-规约冲突 1<<3
+            static const int ReduceReduce;  // 规约-规约冲突 1<<4
         };
 
     private:

@@ -1,17 +1,17 @@
 #include "LR0Parsing.h"
 #include <queue>
 
-int M6::LR0Parsing::StateType::None = 0;
-int M6::LR0Parsing::StateType::Shift = 1 << 1;
-int M6::LR0Parsing::StateType::Reduce = 1 << 2;
-int M6::LR0Parsing::StateType::ShiftReduce = 1 << 3;
-int M6::LR0Parsing::StateType::ReduceReduce = 1 << 4;
+const int M6::LR0Parsing::StateType::None = 0;
+const int M6::LR0Parsing::StateType::Shift = 1 << 1;
+const int M6::LR0Parsing::StateType::Reduce = 1 << 2;
+const int M6::LR0Parsing::StateType::ShiftReduce = 1 << 3;
+const int M6::LR0Parsing::StateType::ReduceReduce = 1 << 4;
 
 M6::LR0Parsing::LR0Parsing()
 {
     m_start_token = L"";
     m_end_of_file = L"$";
-    m_dot = L"\xb7";  // 中文「·」
+    m_dot = L"\x2022";  // 英文 「•」
 }
 
 void M6::LR0Parsing::SetStartToken(std::wstring start_token)
@@ -190,8 +190,8 @@ void M6::LR0Parsing::Preprocess()
         将所有产生式以 vector 列出，并给出在规约状态下的编号
     */
     int production_index = 0;
-    auto acc = std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_dot, m_end_of_file });
-    m_productions.push_back(std::make_tuple(m_start_token + L"'", std::vector<token>{ m_start_token, m_end_of_file }));  // 这个是 Accept 状态
+    auto acc = std::make_tuple(m_start_token + L"\xb4", std::vector<token>{ m_start_token, m_dot, m_end_of_file });
+    m_productions.push_back(std::make_tuple(m_start_token + L"\xb4", std::vector<token>{ m_start_token, m_end_of_file }));  // 这个是 Accept 状态  L"\xb4" 是  L'´'
     m_production_index[acc] = production_index++;
     
     // 其余在下面代码中合写
@@ -199,7 +199,7 @@ void M6::LR0Parsing::Preprocess()
     /*
         起始项目 S'->.S$
     */
-    m_start_item = std::make_tuple(m_start_token + L"'", 
+    m_start_item = std::make_tuple(m_start_token + L"\xb4",
         std::vector<token>{ m_dot, m_start_token, m_end_of_file });
 
     /*
@@ -225,7 +225,7 @@ void M6::LR0Parsing::Preprocess()
             temp_set.insert(std::make_tuple(productions.first, temp_production));
 
             m_productions.push_back(std::make_tuple(productions.first, producton));
-            reduce_production.push_back(m_dot);
+            reduce_production.push_back(m_dot);  // TODO 需要修改对 epsilon 的处理
             m_production_index[std::make_tuple(productions.first, reduce_production)] = production_index++;
         }
 
@@ -353,7 +353,7 @@ void M6::LR0Parsing::ReData()
         }
 
         // $ 判断
-        if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Reduce))  // 只有规约状态
+        if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Reduce))  // 有规约状态
         {
             if (state.size() > 1)
             {
