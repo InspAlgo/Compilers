@@ -12,6 +12,7 @@ M6::LR0Parsing::LR0Parsing()
     m_start_token = L"";
     m_end_of_file = L"$";
     m_dot = L"\x2022";  // 英文 「•」
+    m_parsing_stack_cur_data = std::make_tuple(0, L"", L"", L"", L"");
 }
 
 void M6::LR0Parsing::SetStartToken(std::wstring start_token)
@@ -49,7 +50,12 @@ void M6::LR0Parsing::RunParsing()
 
 void M6::LR0Parsing::Clear()
 {
+    /*
+        构建分析表模块
+    */
     m_start_token = L"";
+    // m_end_of_file 文件结束符赋值改变
+    // m_dot 点号标记赋值改变
     m_nonterminal.clear();
     m_terminal.clear();
     m_nt.clear();
@@ -63,7 +69,15 @@ void M6::LR0Parsing::Clear()
     m_productions_map.clear();
     m_production_index.clear();
     m_parsing_table.clear();
-    // m_start_item 赋值改变
+    // m_start_item 元组使用赋值改变
+
+    /*
+        符号字符串分析模块
+    */
+    m_next_tokens.clear();
+    m_state_index_stack.clear();
+    m_token_stack.clear();
+    m_parsing_stack_cur_data = std::make_tuple(0, L"", L"", L"", L"");
 }
 
 void M6::LR0Parsing::GetGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &productions)
@@ -115,21 +129,21 @@ M6::LR0Parsing::item_set M6::LR0Parsing::Goto(item_set set, token x)
     {
         // 点号后面是非终结符，添加其带点号的拓展产生式
         auto item = std::get<1>(item_i);
-        for (int i = 0, size = item.size(); i < size; i++)
+        for (auto i = size_t(0), size = item.size(); i < size; i++)
         {
-            if (i == size - 1 || item[i + 1] == m_end_of_file)  // 点号不能是最后一个 token，且下一个不能是 $
+            if (i == size - size_t(1) || item[i + size_t(1)] == m_end_of_file)  // 点号不能是最后一个 token，且下一个不能是 $
                 break;
             if (item[i] != m_dot)  // 寻找点号位置
                 continue;
-            if (item[i + 1] != x)  // 点号后面必须是 x，否则不能经过 x 进行转换
+            if (item[i + size_t(1)] != x)  // 点号后面必须是 x，否则不能经过 x 进行转换
                 break;
             
             auto new_item = std::vector<token>();
-            for (auto k = 0; k < size; k++)
+            for (auto k = size_t(0); k < size; k++)
                 new_item.push_back(item[k]);
             
-            new_item[i] = new_item[i + 1];
-            new_item[i + 1] = m_dot;
+            new_item[i] = new_item[i + size_t(1)];
+            new_item[i + size_t(1)] = m_dot;
             
             temp.insert(std::make_tuple(std::get<0>(item_i), new_item));
             break;
@@ -154,16 +168,16 @@ void M6::LR0Parsing::Closure(item_set &set)
             // 点号后面是非终结符，添加其带点号的拓展产生式
             auto item = std::get<1>(item_i);
 
-            for (int i = 0, size = item.size(); i < size; i++)
+            for (auto i = size_t(0), size = item.size(); i < size; i++)
             {
-                if (i == size - 1 || item[i + 1] == m_end_of_file)  // 点号不能是最后一个 token，且下一个不能是 $
+                if (i == size - size_t(1) || item[i + size_t(1)] == m_end_of_file)  // 点号不能是最后一个 token，且下一个不能是 $
                     break;
                 if (item[i] != m_dot)
                     continue;
-                if (m_nonterminal.find(item[i + 1]) == m_nonterminal.end())  // 点号后不是非终结符
+                if (m_nonterminal.find(item[i + size_t(1)]) == m_nonterminal.end())  // 点号后不是非终结符
                     break;
 
-                auto temp = m_items_start[item[i + 1]];
+                auto temp = m_items_start[item[i + size_t(1)]];
                 new_set.insert(temp.begin(), temp.end());
                 break;
             }
@@ -312,7 +326,7 @@ void M6::LR0Parsing::Building()
         else  // 只有规约动作
         {
             m_state_type[index_C] |= StateType::Reduce;
-            if (C.size() > 1)  // 含有多个规约动作
+            if (C.size() > size_t(1))  // 含有多个规约动作
                 m_state_type[index_C] |= StateType::ReduceReduce;
         }
     }
@@ -320,7 +334,7 @@ void M6::LR0Parsing::Building()
 
 void M6::LR0Parsing::ReData()
 {
-    for (auto state : m_state_set)
+    for (auto &state : m_state_set)
     {
         int state_index = m_state_map[state];  // 获取状态索引值，这里的循环是按从小到大的顺序的
 
@@ -344,7 +358,7 @@ void M6::LR0Parsing::ReData()
                     if (m_production_index.find(i) != m_production_index.end())
                     {
                         int grammar_index = m_production_index[i];
-                        cell_data += L"r" + std::to_wstring(grammar_index);
+                        cell_data += (grammar_index > 0 ? L"r" + std::to_wstring(grammar_index) : L"");
                     }
                 }
             }
@@ -355,32 +369,18 @@ void M6::LR0Parsing::ReData()
         // $ 判断
         if (m_state_type[state_index] == (m_state_type[state_index] | StateType::Reduce))  // 有规约状态
         {
-            if (state.size() > 1)
-            {
-                std::wstring cell_data = L"";
-                for (auto i : state)  // 获取所有项目
-                {
-                    if (m_production_index.find(i) != m_production_index.end())
-                    {
-                        int grammar_index = m_production_index[i];
-                        cell_data += L"r" + std::to_wstring(grammar_index);
-                    }
-                }
-                m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = cell_data;
-            }
-            else
-            {
-                int grammar_index = m_production_index[*state.begin()];
+            std::wstring cell_data = L"";
 
-                if (grammar_index)  // 不是 0，说明不是 Accept State
-                    m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"r" + std::to_wstring(grammar_index);
-                else
+            for (auto &i : state)  // 获取所有项目
+            {
+                if (m_production_index.find(i) != m_production_index.end())
                 {
-                    m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"acc";
-                    for (auto i : m_terminal)
-                        m_parsing_table[std::make_tuple(state_index, i)] = L"";
+                    int grammar_index = m_production_index[i];
+                    cell_data += (grammar_index > 0 ? L"r" + std::to_wstring(grammar_index) : L"acc");
                 }
             }
+
+            m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = cell_data;
         }
         else
             m_parsing_table[std::make_tuple(state_index, m_end_of_file)] = L"";
@@ -400,4 +400,131 @@ void M6::LR0Parsing::ReData()
             m_parsing_table[std::make_tuple(state_index, t)] = cell_data;
         }
     }
+}
+
+void M6::LR0Parsing::SetNextTokenInput(const std::vector<std::wstring> &next_tokens)
+{
+    m_next_tokens.clear();
+
+    m_next_tokens.push_back(m_end_of_file);
+
+    for (auto i = next_tokens.rbegin(); i != next_tokens.rend(); ++i)
+        m_next_tokens.push_back(*i);
+}
+
+void M6::LR0Parsing::ReNextStep(std::tuple<int, std::wstring, std::wstring, std::wstring, std::wstring> &data)
+{
+    data = m_parsing_stack_cur_data;
+}
+
+M6::LR0Parsing::token M6::LR0Parsing::NextToken()
+{
+    token re = L"";
+
+    if (m_next_tokens.size())
+    {
+        re = *m_next_tokens.rbegin();  // 由于使用的是倒序储存，故每次从末尾取符号
+        m_next_tokens.pop_back();
+    }
+
+    if(!m_next_tokens.size())  // 始终保持有输入串的右界符存在
+        m_next_tokens.push_back(m_end_of_file);
+    
+    return re;
+}
+
+int M6::LR0Parsing::NextState()
+{
+    int re = -1;
+
+    if (m_state_index_stack.size())
+        re = *m_state_index_stack.rbegin();
+
+    return re;
+}
+
+void M6::LR0Parsing::ParsingStackToStrData(int index, std::wstring parsing_action)
+{
+    std::wstring state_stack_str = L"";  // 状态栈
+    for (auto i : m_state_index_stack)
+        state_stack_str += L" " + std::to_wstring(i);
+
+    std::wstring token_stack_str = L"";  // 符号栈
+    for (auto i : m_token_stack)
+        token_stack_str += L" " + i;
+
+    std::wstring input_tokens_str = L"";  // 输入字符串
+    for (auto i = m_next_tokens.rbegin(); i != m_next_tokens.rend(); ++i)
+        input_tokens_str += L" " + *i;
+
+    m_parsing_stack_cur_data = std::make_tuple(index, state_stack_str, token_stack_str, input_tokens_str, parsing_action);
+}
+
+void M6::LR0Parsing::LR0ParsingInit()
+{
+    m_state_index_stack.clear();  // 状态栈
+    m_token_stack.clear();  // 符号栈
+
+    m_token_stack.push_back(m_end_of_file);  // 与右界符相对应的左界符
+    m_state_index_stack.push_back(0);  // 初始状态
+
+    ParsingStackToStrData(0, L"");
+}
+
+bool M6::LR0Parsing::RunCurStep()
+{
+    ParsingStackToStrData(std::get<0>(m_parsing_stack_cur_data) + 1, L"");
+
+    auto next_token = NextToken();  // 没有下一个时，返回 L""
+    auto state = NextState();  // 取状态栈栈顶元素，当栈为空时，返回 -1
+
+    if (state < 0)  // 当前状态栈栈顶为空，错误中断
+    {
+        std::get<4>(m_parsing_stack_cur_data) = L"error";
+        return false;
+    }
+    if (*m_token_stack.rbegin() == m_start_token)  // 当前符号栈栈顶为起始符号，说明规约结束
+    {
+        std::get<4>(m_parsing_stack_cur_data) = L"acc";
+        return false;
+    }
+
+    auto temp = m_parsing_table[std::make_tuple(state, next_token)];
+    
+    if (temp.length() <= 0)  // error
+    {
+        std::get<4>(m_parsing_stack_cur_data) = L"error";
+        return false;  // 错误中断
+    }
+    else if (temp[0] == L's')  // 移进动作
+    {
+        std::get<4>(m_parsing_stack_cur_data) = temp;
+
+        m_token_stack.push_back(next_token);
+        m_state_index_stack.push_back(std::stoi(temp.substr(1)));
+    }
+    else if (temp[0] == L'r')  // 规约动作
+    {
+        std::get<4>(m_parsing_stack_cur_data) = temp;
+
+        auto pr = m_productions[std::stoi(temp.substr(1))];  // production-reducing 规约产生式
+
+        // 移出符号栈中被规约的符号以及对应的状态栈编号
+        for (auto len = std::get<1>(pr).size(); len; len--)
+        {
+            m_token_stack.pop_back();
+            m_state_index_stack.pop_back();
+        }
+
+        auto s = NextState();
+        m_token_stack.push_back(std::get<0>(pr));
+        m_state_index_stack.push_back(m_goto_table[std::make_tuple(s, std::get<0>(pr))]);
+    }
+    else
+    {
+        std::get<4>(m_parsing_stack_cur_data) = L"error";
+        return false;
+    }
+
+    return true;  // 结束当前步骤，还有剩余步骤
 }
