@@ -65,7 +65,7 @@ namespace M6
         std::map<token, item_set> m_items_start;  // 非终结符 token 对应产生式的所有项目初始集合
         std::map<item_set, int> m_state_map;  // state 表
         std::vector<item_set> m_state_set;  // state 集，以 vector 顺序存储，方便索引
-        std::vector<int> m_state_type;  // state 集类型，0-无类型; 1<<1 - 移进, 1<<2 - 规约
+        std::vector<int> m_state_type;  // state 集类型，存放 StateType 类型数据
         std::map<std::tuple<int, token>, int> m_action_table;  // action 表
         std::map<std::tuple<int, token>, int> m_goto_table;  // goto 表
         std::map<std::tuple<int, token>, std::wstring> m_parsing_table;  // 返回用于界面显示的分析表

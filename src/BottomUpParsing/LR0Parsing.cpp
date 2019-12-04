@@ -305,13 +305,13 @@ void M6::LR0Parsing::Building()
             int reduce_count = 0;  // 可规约的项目数量
 
             // 判断是否含有规约动作
-            for (auto i : m_production_index)
+            for (auto &i : m_production_index)
             {
-                if (C.find(i.first) == C.end())
+                if (C.find(i.first) != C.end())
                     reduce_count++;
             }
 
-            if (reduce_count)  // 含有规约动作
+            if (reduce_count > 0)  // 含有规约动作
             {
                 m_state_type[index_C] |= StateType::Reduce;
                 m_state_type[index_C] |= StateType::ShiftReduce;
