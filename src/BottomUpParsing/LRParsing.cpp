@@ -45,8 +45,8 @@ void M6::LRParsing::SetEndOfFile(const std::wstring &end_of_file)
     m_end_of_file = end_of_file;
 }
 
-void M6::LRParsing::AddProduction(const std::wstring &production_left, 
-                                  const std::vector<std::wstring> &production_right)
+void M6::LRParsing::AddProduction(const std::wstring &production_left,
+    const std::vector<std::wstring> &production_right)
 {
     m_nonterminals.insert(production_left);
     m_original_grammar[production_left].insert(production_right);
@@ -60,8 +60,10 @@ void M6::LRParsing::BuildLRParsingTable()
 {
     Preprocess();
 
+    BuildItemsSets();
+
     BuildLR0ParsingTable();
-    
+
     if (m_LR0)
         return;
 
@@ -100,9 +102,14 @@ void M6::LRParsing::CreateTerminalSet()
 {
     m_terminals.clear();
 
+    m_expanding_alltokens = m_alltokens;
+    m_expanding_nonterminals = m_nonterminals;
+    m_expanding_alltokens.insert(m_new_start_token);
+    m_expanding_nonterminals.insert(m_new_start_token);
+
     for (auto i : m_alltokens)
     {
-        if (m_nonterminals.find(i) == m_nonterminals.end()) 
+        if (m_nonterminals.find(i) == m_nonterminals.end())
             m_terminals.insert(i);
     }
 }
@@ -149,7 +156,7 @@ void M6::LRParsing::CreateReductionItemTable()
         auto left = std::get<0>(m_expanding_grammar[i]);
         auto production = std::get<1>(m_expanding_grammar[i]);
 
-        if ((*production.begin()).length)  // 如果右部不是 epsilon
+        if (production.begin()->length())  // 如果右部不是 epsilon
             production.push_back(m_dot);  // 规约项目即产生式最后面加个 dot 符号
         else  // 右部是 epsilon
             (*production.begin()) = m_dot;  // 仅有项目 A->·
@@ -161,7 +168,7 @@ void M6::LRParsing::CreateReductionItemTable()
 void M6::LRParsing::CreateNullable()
 {
     m_nullable.clear();
-    for (auto x : m_nonterminals)
+    for (auto x : m_expanding_nonterminals)
         m_nullable[x] = false;
 
     auto is_changing = true; // 标记 nullable 在一轮迭代中是否发生改变
@@ -192,7 +199,7 @@ void M6::LRParsing::CreateNullable()
             {
                 // 遇到终结符，则此产生式的左部符号是不可空的
                 // 遇到非终结符，则判断此非终结符是否可空
-                if (m_nonterminals.find(x) == m_nonterminals.end() || !m_nullable[x])
+                if (m_expanding_nonterminals.find(x) == m_expanding_nonterminals.end() || !m_nullable[x])
                 {
                     flag = false;
                     break;
@@ -210,32 +217,62 @@ void M6::LRParsing::CreateNullable()
 void M6::LRParsing::CreateFirstSet()
 {
     m_first_set.clear();
-    for (auto x : m_nonterminals)
+    for (auto x : m_expanding_nonterminals)
         m_first_set[x] = std::set<Token>();
 
-    for (auto &ex_production : m_expanding_grammar)
+    for (auto is_changing = true; is_changing;)
     {
-        auto left = std::get<0>(ex_production);
-        auto right = std::get<1>(ex_production);
+        is_changing = false;
 
-        for (auto x : right)
+        for (auto &ex_production : m_expanding_grammar)
         {
-            // 右部为 epsilon
-            if (!x.length())
+            auto left = std::get<0>(ex_production);
+            auto right = std::get<1>(ex_production);
+
+            auto count = m_first_set[left].size();
+
+            auto epsilon_count = static_cast<size_t>(0);  // 统计产生式右部可推导出 epsilon 的非终结符数量
+
+            for (auto x : right)
             {
+                // 右部为 epsilon
+                if (!x.length())
+                {
+                    m_first_set[left].insert(std::wstring(L""));
+                    break;
+                }
+
+                // 右部以终结符开头
+                if (m_expanding_nonterminals.find(x) == m_expanding_nonterminals.end())
+                {
+                    m_first_set[left].insert(x);
+                    break;
+                }
+
+                // 右部形如 y[1]y[2]...y[n] 且 y[1]y[2]...y[i-1] 都是非终结符
+                // 如果是非终结符不可空
+                if (!m_nullable[x])
+                {
+                    m_first_set[left].insert(m_first_set[x].begin(), m_first_set[x].end());
+                    break;
+                }
+                else // 可空，将 y[i] 非 epsilon 元素添加进来
+                {
+                    for (auto i : m_first_set[x])
+                    {
+                        if (i.length())
+                            m_first_set[left].insert(i);
+                    }
+
+                    epsilon_count++;
+                }
+            }
+
+            if (epsilon_count == right.size())  // 如果右部全部可推导出 epsilon 则将 epsilon 添加进来
                 m_first_set[left].insert(std::wstring(L""));
-                break;
-            }
 
-            // 右部以终结符开头
-            if (m_nonterminals.find(x) == m_nonterminals.end())
-            {
-                m_first_set[left].insert(x);
-                break;
-            }
-
-            // 右部为多个产生式
-
+            if (m_first_set[left].size() != count)
+                is_changing = true;
         }
     }
 }
@@ -243,14 +280,65 @@ void M6::LRParsing::CreateFirstSet()
 void M6::LRParsing::CreateFollowSet()
 {
     m_follow_set.clear();
-    for (auto x : m_nonterminals)
+    for (auto x : m_expanding_nonterminals)
         m_follow_set[x] = std::set<Token>();
+
+    // 对文法的起始符号 S，将 "$" 加到 FOLLOW(S) 中
+    m_follow_set[m_new_start_token].insert(m_end_of_file);
+
+    for (auto is_changing = true; is_changing;)
+    {
+        is_changing = false;
+
+        for (auto &ex_production : m_expanding_grammar)
+        {
+            auto left = std::get<0>(ex_production);
+            auto right = std::get<1>(ex_production);
+
+
+            if (!right.begin()->length())  // 右部为 epsilon 则直接跳过
+                continue;
+
+            auto count = m_follow_set[left].size();
+            auto temp = m_follow_set[left];
+
+            for (auto iter = right.rbegin(); iter != right.rend(); ++iter)
+            {
+                if (m_expanding_nonterminals.find((*iter)) == m_expanding_nonterminals.end())
+                    (temp = std::set<Token>()).insert((*iter));
+                else
+                {
+                    auto count2 = m_follow_set[(*iter)].size();
+
+                    m_follow_set[(*iter)].insert(temp.begin(), temp.end());
+
+                    if (m_follow_set[(*iter)].size() != count2)
+                        is_changing = true;
+
+                    if (!m_nullable[(*iter)])
+                        temp = std::set<Token>();
+
+                    for (auto x : m_first_set[(*iter)])
+                    {
+                        if (x.length())
+                            temp.insert(x);
+                    }
+                }
+            }
+
+            if (m_follow_set[left].size() != count)
+                is_changing = true;
+        }
+    }
 }
 
 void M6::LRParsing::Closure(std::set<Item> &items_set)
 {
-    for (auto new_set = items_set; new_set.size();)
+    auto count = static_cast<size_t>(0);
+
+    for (auto new_set = items_set; count != items_set.size();)
     {
+        count = items_set.size();
         auto temp_set = std::set<Item>();
 
         for (auto &i : new_set)
@@ -278,6 +366,85 @@ void M6::LRParsing::Closure(std::set<Item> &items_set)
 
         new_set = temp_set;
     }
+}
+
+void M6::LRParsing::Closure(std::set<Item2> &items_set)
+{
+    auto count1 = static_cast<size_t>(1);
+    auto count2 = static_cast<size_t>(0);
+    auto item_tokens = std::map<Item, std::set<std::wstring>>();  // LR(1) 项目中 [心] 与 [向前搜索符] 的映射，方便合并 [向前搜索符]
+
+    for (auto new_set = items_set; count1 != count2;)
+    {
+        count1 = count2;
+        auto temp_set = std::set<Item2>();
+
+        for (auto &i : new_set)  // 这里的 i 即是一个项目 [A->α·Bβ,a]
+        {
+            auto left = std::get<0>(i);  // A
+            auto production = std::get<1>(i);  // α·Bβ
+            auto look_ahead_token = std::get<2>(i);  // 向前查看符 a
+
+            // 合并向前查看符
+            item_tokens[std::make_tuple(left, production)].insert(look_ahead_token.begin(), look_ahead_token.end());
+            count2 += look_ahead_token.size();
+
+            // 遍历 α·Bβ 定位到 B 的位置
+            for (auto k = static_cast<size_t>(0), size = production.size(); k < size; k++)
+            {
+                if (k == size - size_t(1))
+                    break;
+
+                if (production[k] == m_dot &&
+                    m_nonterminals.find(production[k + size_t(1)]) != m_nonterminals.end())
+                {
+                    auto set = m_original_items[production[k + size_t(1)]];
+                    auto new_look_ahead_token = std::set<std::wstring>();
+
+                    // 求 FIRST(βa)
+                    auto temp_flag = false;
+                    for (auto m = k + size_t(2); m < size; m++)
+                    {
+                        if (m_expanding_nonterminals.find(production[m]) == m_expanding_nonterminals.end())
+                        {
+                            new_look_ahead_token.insert(production[m]);
+                            temp_flag = true;
+                            break;
+                        }
+
+                        if(!m_nullable[production[m]])
+                        {
+                            auto x = m_first_set[production[m]];
+                            new_look_ahead_token.insert(x.begin(), x.end());
+                            temp_flag = true;
+                            break;
+                        }
+                        else
+                        {
+                            for (auto x : m_first_set[production[m]])
+                            {
+                                if (x.length())
+                                    new_look_ahead_token.insert(x);
+                            }
+                        }
+                    }
+                    if (!temp_flag)  // 说明 β =*> ε
+                        new_look_ahead_token.insert(look_ahead_token.begin(), look_ahead_token.end());
+
+                    for (auto &item : set)
+                        temp_set.insert(std::make_tuple(std::get<0>(item), std::get<1>(item), new_look_ahead_token));
+
+                    break;
+                }
+            }
+        }
+
+        new_set = temp_set;
+    }
+
+    items_set.clear();
+    for (auto &i : item_tokens)
+        items_set.insert(std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), i.second));
 }
 
 std::set<M6::LRParsing::Item> M6::LRParsing::Go(const std::set<Item> &items_set, const Token &x)
@@ -309,10 +476,39 @@ std::set<M6::LRParsing::Item> M6::LRParsing::Go(const std::set<Item> &items_set,
     return re;
 }
 
+std::set<M6::LRParsing::Item2> M6::LRParsing::Go(const std::set<Item2> &items_set, const Token &x)
+{
+    auto re = std::set<Item2>();
+
+    for (auto i : items_set)
+    {
+        auto item = std::get<1>(i);
+        for (auto k = size_t(0), size = item.size(); k < size; k++)
+        {
+            if (k == size - size_t(1))
+                break;
+            if (item[k] != m_dot)
+                continue;
+            if (item[k + size_t(1)] != x)
+                break;
+
+            auto new_item = item;  // 深拷贝
+            new_item[k] = new_item[k + size_t(1)];
+            new_item[k + size_t(1)] = m_dot;
+
+            re.insert(std::make_tuple(std::get<0>(i), new_item, std::get<2>(i)));
+            break;
+        }
+    }
+
+    Closure(re);
+    return re;
+}
+
 void M6::LRParsing::BuildItemsSets()
 {
     // 1. 求 Closure({S'->·S}) 得到初态项目集
-    auto I0 = std::set<Item>{std::make_tuple(m_new_start_token, std::vector<Token>{m_dot, m_start_token})};
+    auto I0 = std::set<Item>{ std::make_tuple(m_new_start_token, std::vector<Token>{m_dot, m_start_token}) };
     Closure(I0);
 
     auto count = static_cast<size_t>(0);
@@ -352,6 +548,9 @@ void M6::LRParsing::BuildItemsSets()
 
 void M6::LRParsing::BuildLR0ParsingTable()
 {
+    m_LR0_action_table.clear();
+    m_LR0_goto_table.clear();
+
     for (auto &I_k : m_items_sets_1)
     {
         auto index_I_k = m_items_sets_1_map[I_k];
@@ -415,6 +614,9 @@ void M6::LRParsing::BuildLR0ParsingTable()
 
 void M6::LRParsing::BuildSLR1ParsingTable()
 {
+    m_LR0_action_table.clear();
+    m_LR0_goto_table.clear();
+
     for (auto &I_k : m_items_sets_1)
     {
         auto index_I_k = m_items_sets_1_map[I_k];
