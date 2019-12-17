@@ -16,8 +16,9 @@ namespace M6
     {
     public:
         LRParsing();
+        ~LRParsing();
 
-        // 清空文法及分析表
+        // 清空所有容器类型成员，起始符号全部置空，文法标记全部置 false
         void Clear();
 
         // 设置文法中的起始符号和拓广文法中的新起始符号
@@ -39,19 +40,16 @@ namespace M6
 
         // 获取文法类型
         // 返回 0-非LR文法 1-LR(0)文法 2-SLR(1)文法 3-LALR(1)文法 4-LR(1)文法
-        int GetGrammarType();
+        std::string GetGrammarType();
 
     private:
         using Token = std::wstring;  // 符号类型
-        using Production = std::tuple<Token, std::vector<Token>>;  // 产生式类型
-        using Item = std::tuple<Token, std::vector<Token>>;  // LR(0)/SLR(1) 项目类型
-        using Item2 = std::tuple<Token, std::vector<Token>, std::set<Token>>;  // LR(1)/LALR(1) 项目类型
-
-        std::set<Token> GetLookAheadTokens(const std::set<Item2> &items_set, const Item &item);
+        using ItemLR0 = std::tuple<Token, std::vector<Token>>;  // LR(0)/SLR(1) 文法的项目类型
+        using ItemLR1 = std::tuple<Token, std::vector<Token>, std::set<Token>>;  // LR(1)/LALR(1) 文法的项目类型
 
     private:
         // 预处理部分
-        // 包含生成 terminal 集合、拓广文法、生成规约项目表
+        // 包含生成 terminal 集合、拓广文法、生成规约项目表、创建 NULLABLE/FIRST/FOLLOW 集
         void Preprocess();
 
         // 生成 terminal 集合
@@ -71,23 +69,25 @@ namespace M6
         void CreateNullable();
 
         // 生成文法的 FIRST 集(非推广形式)
-        // 推广形式使用的是 SELECT 集表示
         void CreateFirstSet();
 
         // 生成文法的 FOLLOW 集
         void CreateFollowSet();
 
         // LR(0)/SLR(1) 文法的闭包函数
-        void Closure(std::set<Item> &items_set);
+        void Closure(std::set<ItemLR0> &items_set);
 
         // LR(1)/LALR(1) 文法的闭包函数
-        void Closure(std::set<Item2> &items_set);
+        void Closure(std::set<ItemLR1> &items_set);
 
         // LR(0)/SLR(1) 文法的状态转移函数
-        std::set<Item> Go(const std::set<Item> &items_set, const Token &x);
+        std::set<ItemLR0> Go(const std::set<ItemLR0> &items_set, const Token &x);
 
         // LR(1)/LALR(1) 文法的状态转移函数
-        std::set<Item2> Go(const std::set<Item2> &items_set, const Token &x);
+        std::set<ItemLR1> Go(const std::set<ItemLR1> &items_set, const Token &x);
+
+        // 获取 LR(1) 项目集类型 set{[A->α·β,a],...,[B->r·,b]} 中规约项目 B->r· 的向前查看符 b
+        std::set<Token> GetLookAheadTokens(const std::set<ItemLR1> &items_set, const ItemLR0 &item);
 
         // 构造识别 LR(0)/SLR(1) 文法规范句型活前缀 DFA
         // 即构造 LR(0)/SLR(1) 文法的项目集规范族
@@ -108,19 +108,38 @@ namespace M6
         // 构建 LR(1) ACTION/GOTO 表
         void BuildLR1ParsingTable();
 
+        // 合并同心集的向前查看符
+        void MergeLookAheadTokens(const std::set<size_t> &same_cores_set, const size_t &index);
+
+        // 构建 LALR(1) 项目集
+        // 调用 MergeLookAheadTokens() 方法
+        void BuildItem3sSets();
+
+        // 更新 LALR(1) 的 DFA
+        // 因为之前存的 DFA 是 LR(1) 的
+        void UpdateDFAofLALR1();
+
         // 构建 LALR(1) ACTION/GOTO 表
         void BuildLALR1ParsingTable();
 
         // 创建 LR(0)/SLR(1) 分析表
-        void CreateParsingTable1(bool &grammar_flag);
+        void CreateParsingTable(bool &grammar_flag);
 
-        // 创建 LR(1) 分析表
-        void CreateParsingTable2(bool &grammar_flag);
+        // 创建 LR(1)/LALR(1) 分析表
+        void CreateParsingTable(bool &grammar_flag, const std::vector<std::set<ItemLR1>> &items_sets, const std::map<std::set<ItemLR1>, size_t> &items_sets_3_map);
+
+        // 拷贝 DFA
+        void CopyDFA(std::map<std::tuple<size_t, Token>, size_t> &DFA);
 
         // 拷贝分析表
         void CopyParsingTable(std::map<std::tuple<std::string, Token>, std::string> &parsing_table);
 
     private:
+        bool m_LR0;  // 标记是否为 LR(0) 文法
+        bool m_SLR1;  // 标记是否为 SLR(1) 文法
+        bool m_LALR1;  // 标记是否为 LALR(1) 文法
+        bool m_LR1;  // 标记是否为 LR(1) 文法
+
         Token m_start_token;  // 文法中的起始符号
         Token m_new_start_token;  // 拓广文法中的新起始符号
         Token m_dot;  // 一个项目里的点号
@@ -134,37 +153,39 @@ namespace M6
         std::set<Token> m_expanding_terminals;  // 拓广文法的终结符集合
         std::set<Token> m_expanding_alltokens;  // 拓广文法的所有非终结符和终结符集合
 
-        std::vector<Production> m_expanding_grammar;  // 拓广文法
-        std::map<Token, std::set<Item>> m_original_items;  // 初始项目集 即 A->·aB B->·Da 这种 dot 符在首位的项目
-        std::map<Item, size_t> m_reduction_items;  // 所有的规约项目  <规约项目, 对应的拓广文法中的序号>
+        std::vector<std::tuple<Token, std::vector<Token>>> m_expanding_grammar;  // 拓广文法
+        std::map<Token, std::set<ItemLR0>> m_original_items;  // 初始项目集 即 A->·aB B->·Da 这种 dot 符在首位的项目
+        std::map<ItemLR0, size_t> m_reduction_items;  // 所有的规约项目  <规约项目, 对应的拓广文法中的序号>
         
         std::map<Token, bool> m_nullable;  // 拓广文法的非终结符是否可推导到 epsilon
-        std::map<Token, std::set<Token>> m_first_set;  // 拓广文法的 FIRST 集(非推广形式,推广形式使用的是 SELECT 集)
+        std::map<Token, std::set<Token>> m_first_set;  // 拓广文法的 FIRST 集(非推广形式)
         std::map<Token, std::set<Token>> m_follow_set;  // 拓广文法的 FOLLOW 集
 
-        bool m_LR0;  // 标记是否为 LR(0) 文法
-        bool m_SLR1;  // 标记是否为 SLR(1) 文法
-        bool m_LALR1;  // 标记是否为 LALR(1) 文法
-        bool m_LR1;  // 标记是否为 LR(1) 文法
+        std::vector<std::set<ItemLR0>> m_items_sets_LR0orSLR1;  // LR(0)/SLR(1) 项目集规范族，因为 LR(0) 和 SLR(1) 的项目集族相同
+        std::map<std::set<ItemLR0>, size_t> m_items_sets_LR0orSLR1_map;  // 方便获取 m_items_sets_LR0orSLR1 中项目集位置
 
-        std::vector<std::set<Item>> m_items_sets_1;  // LR(0) 和 SLR(1) 项目集规范族
-        std::map<std::set<Item>, size_t> m_items_sets_1_map;  // 方便获取 m_items_sets_1 中项目集位置
-        std::map<std::tuple<size_t, Token>, size_t> m_LR0_DFA;  // 识别 LR(0) 和 SLR(1) 文法活前缀的 DFA
+        std::vector<std::set<ItemLR1>> m_items_sets_LR1;  // LR(1) 项目集族
+        std::map<std::set<ItemLR1>, size_t> m_items_sets_LR1_map;  // 方便获取 m_items_sets_2 中项目集位置
+        std::map<size_t, std::set<ItemLR0>> m_items_sets_LR1_map_LR0;  // LR(1) 项目集中对应的 LR(0) 项目集
 
-        std::vector<std::set<Item2>> m_items_sets_2;  // LR(1) 项目集族
-        std::map<std::set<Item2>, size_t> m_items_sets_2_map;  // 方便获取 m_items_sets_1 中项目集位置
-        std::map<size_t, std::set<Item>> m_items_sets_2_map_1;  // LR(1) 项目集中对应的 LR(0) 项目集
+        std::vector<std::set<ItemLR1>> m_items_sets_LALR1;  // LALR(1) 合并同心集后的项目集族
+        std::map<std::set<ItemLR1>, size_t> m_items_sets_LALR1_map;  // 方便获取 m_items_sets_LALR1 中项目集位置
+        std::map<size_t, std::set<ItemLR0>> m_items_sets_LALR1_map_LR0;  // LALR(1) 项目集中对应的 LR(0) 项目集
+        std::map<size_t, std::set<size_t>> m_items_sets_LALR1_map_LR1;  // 组成 LALR(1) 项目集对应的 LR(1) 项目集编号
+        std::map<size_t, size_t> m_items_sets_LR1_map_LALR1;  // LR(1) 项目集对应的 LALR(1) 项目集
 
-        std::map<std::tuple<size_t, Token>, std::set<std::string>> m_LR0_action_table;  // LR(0)/SLR(1) ACTION 表
-        std::map<std::tuple<size_t, Token>, std::string> m_LR0_goto_table;  // LR(0)/SLR(1) GOTO 表
-        std::map<std::tuple<std::set<size_t>, Token>, std::set<size_t>> m_action_table;  // ACTION 表
-        std::map<std::tuple<std::set<size_t>, Token>, std::set<size_t>> m_goto_table;  // GOTO 表
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA;  // 当前文法项目集的 DFA
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LR0orSLR1;  // LR(0) 项目集的 DFA
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LALR1;  // LR(1) 项目集的 DFA
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LR1;  // LALR(1) 项目集的 DFA
 
-        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table;  // LR 分析表
+        std::map<std::tuple<size_t, Token>, std::set<std::string>> m_action_table;  //  当前文法 ACTION 表
+        std::map<std::tuple<size_t, Token>, std::string> m_goto_table;  //  当前文法 GOTO 表
+
+        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table;  //  当前文法 LR 分析表
         std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LR0;  // LR(0) 分析表
         std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_SLR1;  // SLR(1) 分析表
         std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LALR1;  // LALR(1) 分析表
         std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LR1;  // LR(1) 分析表
-
     };
 }

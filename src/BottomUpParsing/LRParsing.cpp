@@ -1,4 +1,5 @@
 #include "LRParsing.h"
+#include <algorithm>
 #include <queue>
 
 /*
@@ -18,6 +19,11 @@ M6::LRParsing::LRParsing()
     m_LR1 = false;
 }
 
+M6::LRParsing::~LRParsing()
+{
+    Clear();
+}
+
 void M6::LRParsing::Clear()
 {
     m_start_token = L"";
@@ -27,6 +33,50 @@ void M6::LRParsing::Clear()
     m_SLR1 = false;
     m_LALR1 = false;
     m_LR1 = false;
+
+    m_original_grammar.clear();
+
+    m_nonterminals.clear();
+    m_terminals.clear();
+    m_alltokens.clear();
+    m_expanding_nonterminals.clear();
+    m_expanding_terminals.clear();
+    m_expanding_alltokens.clear();
+
+    m_expanding_grammar.clear();
+    m_original_items.clear();
+    m_reduction_items.clear();
+
+    m_nullable.clear();
+    m_first_set.clear();
+    m_follow_set.clear();
+
+    m_items_sets_LR0orSLR1.clear();
+    m_items_sets_LR0orSLR1_map.clear();
+
+    m_items_sets_LR1.clear();
+    m_items_sets_LR1_map.clear();
+    m_items_sets_LR1_map_LR0.clear();
+
+    m_items_sets_LALR1.clear();
+    m_items_sets_LALR1_map.clear();
+    m_items_sets_LALR1_map_LR0.clear();
+    m_items_sets_LALR1_map_LR1.clear();
+    m_items_sets_LR1_map_LALR1.clear();
+   
+    m_DFA.clear();
+    m_DFA_LR0orSLR1.clear();
+    m_DFA_LALR1.clear();
+    m_DFA_LR1.clear();
+
+    m_action_table.clear();
+    m_goto_table.clear();
+
+    m_parsing_table.clear();
+    m_parsing_table_LR0.clear();
+    m_parsing_table_SLR1.clear();
+    m_parsing_table_LALR1.clear();
+    m_parsing_table_LR1.clear();
 }
 
 void M6::LRParsing::SetStartToken(const std::wstring &start_token, const std::wstring &new_start_token)
@@ -66,6 +116,7 @@ void M6::LRParsing::BuildLRParsingTable()
 
     if (m_LR0)
     {
+        CopyDFA(m_DFA_LR0orSLR1);
         CopyParsingTable(m_parsing_table_LR0);
         return;
     }
@@ -74,6 +125,7 @@ void M6::LRParsing::BuildLRParsingTable()
 
     if (m_SLR1)
     {
+        CopyDFA(m_DFA_LR0orSLR1);
         CopyParsingTable(m_parsing_table_SLR1);
         return;
     }
@@ -86,22 +138,29 @@ void M6::LRParsing::BuildLRParsingTable()
 
     if (m_LR1)
     {
+        CopyDFA(m_DFA_LR1);
         CopyParsingTable(m_parsing_table_LR1);
+
+        BuildItem3sSets();
+
+        UpdateDFAofLALR1();
+
         BuildLALR1ParsingTable();
     }
 
     if (m_LALR1)
     {
+        CopyDFA(m_DFA_LALR1);
         CopyParsingTable(m_parsing_table_LALR1);
     }
 }
 
-int M6::LRParsing::GetGrammarType()
+std::string M6::LRParsing::GetGrammarType()
 {
-    return m_LR0 ? 1 : (m_SLR1 ? 2 : (m_LALR1 ? 3 : (m_LR1 ? 4 : 0)));
+    return m_LR0 ? std::string("LR(0)") : (m_SLR1 ? std::string("SLR(1)") : (m_LALR1 ? std::string("LALR(1)") : (m_LR1 ? std::string("LR(1)") : std::string("Not LR Grammar"))));
 }
 
-std::set<M6::LRParsing::Token> M6::LRParsing::GetLookAheadTokens(const std::set<M6::LRParsing::Item2> &items_set, const M6::LRParsing::Item &item)
+std::set<M6::LRParsing::Token> M6::LRParsing::GetLookAheadTokens(const std::set<M6::LRParsing::ItemLR1> &items_set, const M6::LRParsing::ItemLR0 &item)
 {
     auto re = std::set<Token>();
     for (auto &i : items_set)
@@ -125,6 +184,8 @@ void M6::LRParsing::Preprocess()
     CreateOriginalItems();
 
     CreateReductionItemTable();
+
+    CreateNullable();
 
     CreateFirstSet();
 
@@ -174,7 +235,9 @@ void M6::LRParsing::CreateOriginalItems()
         auto production = std::get<1>(i);
 
         auto new_production = std::vector<Token>{ m_dot };
-        new_production.insert(new_production.end(), production.begin(), production.end());
+
+        if (production.begin()->length())
+            new_production.insert(new_production.end(), production.begin(), production.end());
 
         m_original_items[left].insert(std::make_tuple(left, new_production));
     }
@@ -365,14 +428,14 @@ void M6::LRParsing::CreateFollowSet()
     }
 }
 
-void M6::LRParsing::Closure(std::set<Item> &items_set)
+void M6::LRParsing::Closure(std::set<ItemLR0> &items_set)
 {
     auto count = static_cast<size_t>(0);
 
     for (auto new_set = items_set; count != items_set.size();)
     {
         count = items_set.size();
-        auto temp_set = std::set<Item>();
+        auto temp_set = std::set<ItemLR0>();
 
         for (auto &i : new_set)
         {
@@ -401,16 +464,16 @@ void M6::LRParsing::Closure(std::set<Item> &items_set)
     }
 }
 
-void M6::LRParsing::Closure(std::set<Item2> &items_set)
+void M6::LRParsing::Closure(std::set<ItemLR1> &items_set)
 {
     auto count = static_cast<size_t>(1);
-    auto items_set_temp = std::set<Item2>();
-    auto item_tokens = std::map<Item, std::set<std::wstring>>();  // LR(1) 项目中 [心] 与 [向前搜索符] 的映射，方便合并 [向前搜索符]
+    auto items_set_temp = std::set<ItemLR1>();
+    auto item_tokens = std::map<ItemLR0, std::set<std::wstring>>();  // LR(1) 项目中 [心] 与 [向前搜索符] 的映射，方便合并 [向前搜索符]
 
     for (auto new_set = items_set; count != items_set_temp.size();)
     {
         count = items_set_temp.size();
-        auto temp_set = std::set<Item2>();
+        auto temp_set = std::set<ItemLR1>();
 
         for (auto &i : new_set)  // 这里的 i 即是一个项目 [A->α·Bβ,a]
         {
@@ -481,9 +544,9 @@ void M6::LRParsing::Closure(std::set<Item2> &items_set)
         items_set.insert(std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), i.second));
 }
 
-std::set<M6::LRParsing::Item> M6::LRParsing::Go(const std::set<Item> &items_set, const Token &x)
+std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0> &items_set, const Token &x)
 {
-    auto re = std::set<Item>();
+    auto re = std::set<ItemLR0>();
 
     for (auto i : items_set)
     {
@@ -510,9 +573,9 @@ std::set<M6::LRParsing::Item> M6::LRParsing::Go(const std::set<Item> &items_set,
     return re;
 }
 
-std::set<M6::LRParsing::Item2> M6::LRParsing::Go(const std::set<Item2> &items_set, const Token &x)
+std::set<M6::LRParsing::ItemLR1> M6::LRParsing::Go(const std::set<ItemLR1> &items_set, const Token &x)
 {
-    auto re = std::set<Item2>();
+    auto re = std::set<ItemLR1>();
 
     for (auto i : items_set)
     {
@@ -542,16 +605,16 @@ std::set<M6::LRParsing::Item2> M6::LRParsing::Go(const std::set<Item2> &items_se
 void M6::LRParsing::BuildItemsSets()
 {
     // 1. 求 Closure({S'->·S}) 得到初态项目集
-    auto I0 = std::set<Item>{ std::make_tuple(m_new_start_token, std::vector<Token>{m_dot, m_start_token}) };
+    auto I0 = std::set<ItemLR0>{ std::make_tuple(m_new_start_token, std::vector<Token>{m_dot, m_start_token}) };
     Closure(I0);
 
     auto count = static_cast<size_t>(0);
-    m_items_sets_1.push_back(I0);
-    m_items_sets_1_map[I0] = count++;
+    m_items_sets_LR0orSLR1.push_back(I0);
+    m_items_sets_LR0orSLR1_map[I0] = count++;
 
     // 2. 对初态项目集或其他已构造的项目集，应用状态转移函数 GO(I,x) 求出新的项目集
     // 3. 重复 2 直到不出现新的项目集为止
-    auto Q = std::queue<std::set<Item>>();
+    auto Q = std::queue<std::set<ItemLR0>>();
     Q.push(I0);
 
     while (!Q.empty())
@@ -559,7 +622,7 @@ void M6::LRParsing::BuildItemsSets()
         auto I = Q.front();
         Q.pop();
 
-        auto index_I = m_items_sets_1_map[I];
+        auto index_I = m_items_sets_LR0orSLR1_map[I];
 
         for (auto x : m_alltokens)
         {
@@ -568,38 +631,38 @@ void M6::LRParsing::BuildItemsSets()
             if (!D.size()) // D 为空则说明 I 不能通过 x 转换，故跳过
                 continue;
 
-            if (m_items_sets_1_map.find(D) == m_items_sets_1_map.end())
+            if (m_items_sets_LR0orSLR1_map.find(D) == m_items_sets_LR0orSLR1_map.end())
             {
-                m_items_sets_1.push_back(D);
-                m_items_sets_1_map[D] = count++;
+                m_items_sets_LR0orSLR1.push_back(D);
+                m_items_sets_LR0orSLR1_map[D] = count++;
                 Q.push(D);
             }
 
-            m_LR0_DFA[std::make_tuple(index_I, x)] = m_items_sets_1_map[D];
+            m_DFA[std::make_tuple(index_I, x)] = m_items_sets_LR0orSLR1_map[D];
         }
     }
 }
 
 void M6::LRParsing::BuildLR0ParsingTable()
 {
-    m_LR0_action_table.clear();
-    m_LR0_goto_table.clear();
+    m_action_table.clear();
+    m_goto_table.clear();
 
-    for (auto &I_k : m_items_sets_1)
+    for (auto &I_k : m_items_sets_LR0orSLR1)
     {
-        auto index_I_k = m_items_sets_1_map[I_k];
+        auto index_I_k = m_items_sets_LR0orSLR1_map[I_k];
 
         // 1. 若项目 A->a·xb 属于 I_k 且 DFA(I_k, x)=I_j 当 x 为终结符时 置 Action[k,x]=s_j
         for (auto x : m_terminals)
         {
-            if (m_LR0_DFA.find(std::make_tuple(index_I_k, x)) != m_LR0_DFA.end())
+            if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("s") + std::to_string(m_LR0_DFA[std::make_tuple(index_I_k, x)]);
-                m_LR0_action_table[std::make_tuple(index_I_k, x)].insert(s);
+                auto s = std::string("s") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
 
-        auto start_item = Item();
+        auto start_item = ItemLR0();
 
         // 2. 若项目 A->a·属于 I_k 则对任何终结符和结束符$(统一记为c) 置 Action[k,c]=r_j (假定 A->a 为文法的第j条规则)
         for (auto &i : m_reduction_items)
@@ -617,55 +680,55 @@ void M6::LRParsing::BuildLR0ParsingTable()
                 auto r = std::string("r") + std::to_string(i.second);
 
                 for (auto x : m_terminals)
-                    m_LR0_action_table[std::make_tuple(index_I_k, x)].insert(r);
+                    m_action_table[std::make_tuple(index_I_k, x)].insert(r);
 
-                m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
+                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
             }
         }
 
         // 3. 若 DFA(I_k, x)=I_j 且 x 为非终结符 置 Goto[k,x]=g_j
         for (auto x : m_nonterminals)
         {
-            if (m_LR0_DFA.find(std::make_tuple(index_I_k, x)) != m_LR0_DFA.end())
+            if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("g") + std::to_string(m_LR0_DFA[std::make_tuple(index_I_k, x)]);
-                m_LR0_goto_table[std::make_tuple(index_I_k, x)] = s;
+                auto s = std::string("g") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
 
         // 4. 若项目 S'->S· 属于 I_k 置 Action[k,$]=acc
         if (I_k.find(start_item) != I_k.end())
         {
-            m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
     }
 
-    CreateParsingTable1(m_LR0);
+    CreateParsingTable(m_LR0);
 }
 
 void M6::LRParsing::BuildSLR1ParsingTable()
 {
-    m_LR0_action_table.clear();
-    m_LR0_goto_table.clear();
+    m_action_table.clear();
+    m_goto_table.clear();
 
-    for (auto &I_k : m_items_sets_1)
+    for (auto &I_k : m_items_sets_LR0orSLR1)
     {
-        auto index_I_k = m_items_sets_1_map[I_k];
+        auto index_I_k = m_items_sets_LR0orSLR1_map[I_k];
 
         // 1. 若项目 A->a·xb 属于 I_k 且 DFA(I_k, x)=I_j 当 x 为终结符时 置 Action[k,x]=s_j
         for (auto x : m_terminals)
         {
-            if (m_LR0_DFA.find(std::make_tuple(index_I_k, x)) != m_LR0_DFA.end())
+            if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("s") + std::to_string(m_LR0_DFA[std::make_tuple(index_I_k, x)]);
-                m_LR0_action_table[std::make_tuple(index_I_k, x)].insert(s);
+                auto s = std::string("s") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
 
-        auto start_item = Item();
+        auto start_item = ItemLR0();
 
         // 2. 若项目 A->a·属于 I_k 则对任何终结符 a∈FOLLOW(A) 置 Action[k,c]=r_j (假定 A->a 为文法的第j条规则)
         for (auto &i : m_reduction_items)
@@ -683,48 +746,48 @@ void M6::LRParsing::BuildSLR1ParsingTable()
                 auto r = std::string("r") + std::to_string(i.second);
 
                 for (auto x : m_follow_set[std::get<0>(reduction_item)])
-                    m_LR0_action_table[std::make_tuple(index_I_k, x)].insert(r);
+                    m_action_table[std::make_tuple(index_I_k, x)].insert(r);
 
-                m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
+                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
             }
         }
 
         // 3. 若 DFA(I_k, x)=I_j 且 x 为非终结符 置 Goto[k,x]=g_j
         for (auto x : m_nonterminals)
         {
-            if (m_LR0_DFA.find(std::make_tuple(index_I_k, x)) != m_LR0_DFA.end())
+            if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("g") + std::to_string(m_LR0_DFA[std::make_tuple(index_I_k, x)]);
-                m_LR0_goto_table[std::make_tuple(index_I_k, x)] = s;
+                auto s = std::string("g") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
 
         // 4. 若项目 S'->S· 属于 I_k 置 Action[k,$]=acc
         if (I_k.find(start_item) != I_k.end())
         {
-            m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
     }
 
-    CreateParsingTable1(m_SLR1);
+    CreateParsingTable(m_SLR1);
 }
 
 void M6::LRParsing::BuildItem2sSets()
 {
     // 1. 求 Closure({[S'->·S,$]}) 得到初态项目集
-    auto I0 = std::set<Item2>{ std::make_tuple(m_new_start_token, std::vector<Token>{m_dot, m_start_token}, std::set<Token>{m_end_of_file}) };
+    auto I0 = std::set<ItemLR1>{ std::make_tuple(m_new_start_token, std::vector<Token>{m_dot, m_start_token}, std::set<Token>{m_end_of_file}) };
     Closure(I0);
 
     auto count = static_cast<size_t>(0);
-    m_items_sets_2.push_back(I0);
-    m_items_sets_2_map[I0] = count++;
+    m_items_sets_LR1.push_back(I0);
+    m_items_sets_LR1_map[I0] = count++;
 
     // 2. 对初态项目集或其他已构造的项目集，应用状态转移函数 GO(I,x) 求出新的项目集
     // 3. 重复 2 直到不出现新的项目集为止
-    auto Q = std::queue<std::set<Item2>>();
+    auto Q = std::queue<std::set<ItemLR1>>();
     Q.push(I0);
 
     while (!Q.empty())
@@ -732,7 +795,7 @@ void M6::LRParsing::BuildItem2sSets()
         auto I = Q.front();
         Q.pop();
 
-        auto index_I = m_items_sets_2_map[I];
+        auto index_I = m_items_sets_LR1_map[I];
 
         for (auto x : m_alltokens)
         {
@@ -741,55 +804,55 @@ void M6::LRParsing::BuildItem2sSets()
             if (!D.size()) // D 为空则说明 I 不能通过 x 转换，故跳过
                 continue;
 
-            if (m_items_sets_2_map.find(D) == m_items_sets_2_map.end())
+            if (m_items_sets_LR1_map.find(D) == m_items_sets_LR1_map.end())
             {
-                m_items_sets_2.push_back(D);
-                m_items_sets_2_map[D] = count++;
+                m_items_sets_LR1.push_back(D);
+                m_items_sets_LR1_map[D] = count++;
                 Q.push(D);
             }
 
-            m_LR0_DFA[std::make_tuple(index_I, x)] = m_items_sets_2_map[D];
+            m_DFA[std::make_tuple(index_I, x)] = m_items_sets_LR1_map[D];
         }
     }
 }
 
 void M6::LRParsing::CreateItemsSet1Map2()
 {
-    m_items_sets_2_map_1.clear();
+    m_items_sets_LR1_map_LR0.clear();
 
-    for (auto i = size_t(0); i < m_items_sets_2.size(); i++)
+    for (auto i = size_t(0); i < m_items_sets_LR1.size(); i++)
     {
-        auto set = std::set<Item>();
+        auto set = std::set<ItemLR0>();
 
-        for (auto &item : m_items_sets_2[i])
+        for (auto &item : m_items_sets_LR1[i])
             set.insert(std::make_tuple(std::get<0>(item), std::get<1>(item)));
 
-        m_items_sets_2_map_1[i] = set;
+        m_items_sets_LR1_map_LR0[i] = set;
     }
 }
 
 void M6::LRParsing::BuildLR1ParsingTable()
 {
-    m_LR0_action_table.clear();
-    m_LR0_goto_table.clear();
+    m_action_table.clear();
+    m_goto_table.clear();
 
-    for (auto &I_k : m_items_sets_2)
+    for (auto &I_k : m_items_sets_LR1)
     {
-        auto index_I_k = m_items_sets_2_map[I_k];
+        auto index_I_k = m_items_sets_LR1_map[I_k];
 
         // 1. 若项目 A->a·xb 属于 I_k 且 DFA(I_k, x)=I_j 当 x 为终结符时 置 Action[k,x]=s_j
         for (auto x : m_terminals)
         {
-            if (m_LR0_DFA.find(std::make_tuple(index_I_k, x)) != m_LR0_DFA.end())
+            if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("s") + std::to_string(m_LR0_DFA[std::make_tuple(index_I_k, x)]);
-                m_LR0_action_table[std::make_tuple(index_I_k, x)].insert(s);
+                auto s = std::string("s") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
 
-        auto start_item = Item2();
+        auto start_item = ItemLR1();
 
-        // 2. 若项目 A->a·属于 I_k 则对任何终结符和结束符$(统一记为c) 置 Action[k,c]=r_j (假定 A->a 为文法的第j条规则)
+        // 2. 若规约项目 [A->α·,a] 属于 I_k 则向前查看符 a 置 Action[k,a]=r_j (假定 A->α 为文法的第j条规则)
         for (auto &i : m_reduction_items)
         {
             auto reduction_item = i.first;
@@ -800,72 +863,221 @@ void M6::LRParsing::BuildLR1ParsingTable()
                 continue;
             }
 
-            auto I_k_temp = m_items_sets_2_map_1[index_I_k];
+            auto I_k_temp = m_items_sets_LR1_map_LR0[index_I_k];
 
             if (I_k_temp.find(reduction_item) != I_k_temp.end())
             {
                 auto r = std::string("r") + std::to_string(i.second);
 
                 for (auto x : GetLookAheadTokens(I_k, reduction_item))
-                    m_LR0_action_table[std::make_tuple(index_I_k, x)].insert(r);
+                    m_action_table[std::make_tuple(index_I_k, x)].insert(r);
 
-                m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
+                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
             }
         }
 
         // 3. 若 DFA(I_k, x)=I_j 且 x 为非终结符 置 Goto[k,x]=g_j
         for (auto x : m_nonterminals)
         {
-            if (m_LR0_DFA.find(std::make_tuple(index_I_k, x)) != m_LR0_DFA.end())
+            if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("g") + std::to_string(m_LR0_DFA[std::make_tuple(index_I_k, x)]);
-                m_LR0_goto_table[std::make_tuple(index_I_k, x)] = s;
+                auto s = std::string("g") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
 
         // 4. 若项目 S'->S· 属于 I_k 置 Action[k,$]=acc
         if (I_k.find(start_item) != I_k.end())
         {
-            m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_LR0_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
     }
 
-    CreateParsingTable2(m_LR1);
+    CreateParsingTable(m_LR1, m_items_sets_LR1, m_items_sets_LR1_map);
+}
+
+void M6::LRParsing::MergeLookAheadTokens(const std::set<size_t> &same_cores_set, const size_t &index)
+{
+    auto item_map_tokens = std::map<ItemLR0, std::set<Token>>();
+    auto items_set = std::set<ItemLR0>();
+    auto items_set_3 = std::set<ItemLR1>();
+
+    for (auto i : same_cores_set)
+    {
+        m_items_sets_LR1_map_LALR1[i] = index;
+
+        for (auto &item2 : m_items_sets_LR1[i])
+        {
+            auto left = std::get<0>(item2);
+            auto item = std::get<1>(item2);
+            auto look_ahead_tokens = std::get<2>(item2);
+
+            item_map_tokens[std::make_tuple(left,item)].insert(look_ahead_tokens.begin(),look_ahead_tokens.end());
+        }
+    }
+
+    for (auto &i : item_map_tokens)
+    {
+        auto left = std::get<0>(i.first);
+        auto item = std::get<1>(i.first);
+        auto look_ahead_tokens = i.second;
+
+        items_set.insert(std::make_tuple(left, item));
+        items_set_3.insert(std::make_tuple(left, item, look_ahead_tokens));
+    }
+
+    m_items_sets_LALR1.push_back(items_set_3);  // index 是按从小到大的顺序的的，所以可以直接添加
+    m_items_sets_LALR1_map[items_set_3] = index;
+    m_items_sets_LALR1_map_LR0[index] = items_set;
+    m_items_sets_LALR1_map_LR1[index] = same_cores_set;
+}
+
+void M6::LRParsing::BuildItem3sSets()
+{
+    m_items_sets_LALR1.clear();
+    m_items_sets_LALR1_map.clear();
+    m_items_sets_LALR1_map_LR0.clear();
+    m_items_sets_LALR1_map_LR1.clear();
+    m_items_sets_LR1_map_LALR1.clear();
+
+    auto temp_sets_map = std::map<std::set<ItemLR0>, std::set<size_t>>();  // 同心集对应的 LR(1) 项目集
+    auto temp_sets = std::vector<std::set<size_t>>();  // LALR(1) 项目集，以 LR(1) 项目集编号形式表示
+    auto temp_map = std::map<size_t, std::set<size_t>>();  // temp_sets 中 LALR(1) 的位置映射
+    auto temp_sort = std::vector<size_t>();  // 供 LALR(1) 项目集排序使用，结果以从小到大表示
+
+    for (auto &i : m_items_sets_LR1_map_LR0)
+        temp_sets_map[i.second].insert(i.first);
+
+    // 向 temp_sort 中添加同心集中 LR(1) 项目集编号最小的那个编号
+    for (auto &i : temp_sets_map)
+    {
+        auto min_index = *i.second.begin();
+
+        for (auto index : i.second)
+        {
+            if (min_index > index)
+                min_index = index;
+        }
+
+        temp_map[min_index].insert(i.second.begin(), i.second.end());
+        temp_sort.push_back(min_index);
+    }
+
+    std::sort(temp_sort.begin(), temp_sort.end());  // 从小到大排序
+
+    for (auto i = size_t(0); i < temp_sort.size(); i++)
+    {
+        MergeLookAheadTokens(temp_map[temp_sort[i]], i);
+    }
+}
+
+void M6::LRParsing::UpdateDFAofLALR1()
+{
+    for (auto &i : m_DFA)
+    {
+        auto index_from = m_items_sets_LR1_map_LALR1[std::get<0>(i.first)];
+        auto token = std::get<1>(i.first);
+
+        m_DFA_LALR1[std::make_tuple(index_from, token)] = m_items_sets_LR1_map_LALR1[i.second];
+    }
 }
 
 void M6::LRParsing::BuildLALR1ParsingTable()
 {
+    m_action_table.clear();
+    m_goto_table.clear();
 
+    for (auto &I_k : m_items_sets_LALR1)
+    {
+        auto index_I_k = m_items_sets_LALR1_map[I_k];
+
+        // 1. 若项目 A->a·xb 属于 I_k 且 DFA(I_k, x)=I_j 当 x 为终结符时 置 Action[k,x]=s_j
+        for (auto x : m_terminals)
+        {
+            if (m_DFA_LALR1.find(std::make_tuple(index_I_k, x)) != m_DFA_LALR1.end())
+            {
+                auto s = std::string("s") + std::to_string(m_DFA_LALR1[std::make_tuple(index_I_k, x)]);
+                m_action_table[std::make_tuple(index_I_k, x)].insert(s);
+            }
+        }
+
+        auto start_item = ItemLR1();
+
+        // 2. 若规约项目 [A->α·,a] 属于 I_k 则向前查看符 a 置 Action[k,a]=r_j (假定 A->α 为文法的第j条规则)
+        for (auto &i : m_reduction_items)
+        {
+            auto reduction_item = i.first;
+
+            if (!i.second)
+            {
+                start_item = std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), std::set<Token>{m_end_of_file});
+                continue;
+            }
+
+            auto I_k_temp = m_items_sets_LALR1_map_LR0[index_I_k];
+
+            if (I_k_temp.find(reduction_item) != I_k_temp.end())
+            {
+                auto r = std::string("r") + std::to_string(i.second);
+
+                for (auto x : GetLookAheadTokens(I_k, reduction_item))
+                    m_action_table[std::make_tuple(index_I_k, x)].insert(r);
+
+                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
+            }
+        }
+
+        // 3. 若 DFA(I_k, x)=I_j 且 x 为非终结符 置 Goto[k,x]=g_j
+        for (auto x : m_nonterminals)
+        {
+            if (m_DFA_LALR1.find(std::make_tuple(index_I_k, x)) != m_DFA_LALR1.end())
+            {
+                auto s = std::string("g") + std::to_string(m_DFA_LALR1[std::make_tuple(index_I_k, x)]);
+                m_goto_table[std::make_tuple(index_I_k, x)] = s;
+            }
+        }
+
+        // 4. 若项目 S'->S· 属于 I_k 置 Action[k,$]=acc
+        if (I_k.find(start_item) != I_k.end())
+        {
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+        }
+
+        // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
+    }
+
+    CreateParsingTable(m_LALR1, m_items_sets_LALR1, m_items_sets_LALR1_map);
 }
 
-void M6::LRParsing::CreateParsingTable1(bool &grammar_flag)
+void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
 {
     grammar_flag = true;
     m_parsing_table.clear();
 
-    for (auto &i : m_items_sets_1)
+    for (auto &i : m_items_sets_LR0orSLR1)
     {
-        auto index_i = m_items_sets_1_map[i];
+        auto index_i = m_items_sets_LR0orSLR1_map[i];
         auto index_i_str = std::to_string(index_i);
 
         for (auto x : m_terminals)
         {
             auto i_x = std::make_tuple(index_i, x);
 
-            if (m_LR0_action_table.find(i_x) == m_LR0_action_table.end())
+            if (m_action_table.find(i_x) == m_action_table.end())
             {
                 m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
                 continue;
             }
 
-            if (m_LR0_action_table[i_x].size() > size_t(1))  // 大于 1 则说明有冲突
+            if (m_action_table[i_x].size() > size_t(1))  // 大于 1 则说明有冲突
                 grammar_flag = false;  // 不是该类型文法
 
             auto str = std::string("");
-            for (auto s : m_LR0_action_table[i_x])
+            for (auto s : m_action_table[i_x])
                 str += s;
 
             m_parsing_table[std::make_tuple(index_i_str, x)] = str;
@@ -875,51 +1087,54 @@ void M6::LRParsing::CreateParsingTable1(bool &grammar_flag)
         {
             auto i_x = std::make_tuple(index_i, x);
 
-            if (m_LR0_goto_table.find(i_x) == m_LR0_goto_table.end())
+            if (m_goto_table.find(i_x) == m_goto_table.end())
             {
                 m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
                 continue;
             }
 
             auto str = std::string("");
-            for (auto s : m_LR0_goto_table[i_x])
+            for (auto s : m_goto_table[i_x])
                 str += s;
 
             m_parsing_table[std::make_tuple(index_i_str, x)] = str;
         }
 
         auto str = std::string("");
-        for (auto s : m_LR0_action_table[std::make_tuple(index_i, m_end_of_file)])
+        for (auto s : m_action_table[std::make_tuple(index_i, m_end_of_file)])
             str += s;
         m_parsing_table[std::make_tuple(index_i_str, m_end_of_file)] = str;
     }
 }
 
-void M6::LRParsing::CreateParsingTable2(bool &grammar_flag)
+void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std::set<ItemLR1>> &items_sets, const std::map<std::set<ItemLR1>, size_t> &items_sets_map)
 {
     grammar_flag = true;
     m_parsing_table.clear();
 
-    for (auto &i : m_items_sets_2)
+    auto items_sets_temp = items_sets;
+    auto items_sets_map_temp = items_sets_map;
+
+    for (auto &i : items_sets_temp)
     {
-        auto index_i = m_items_sets_2_map[i];
+        auto index_i = items_sets_map_temp[i];
         auto index_i_str = std::to_string(index_i);
 
         for (auto x : m_terminals)
         {
             auto i_x = std::make_tuple(index_i, x);
 
-            if (m_LR0_action_table.find(i_x) == m_LR0_action_table.end())
+            if (m_action_table.find(i_x) == m_action_table.end())
             {
                 m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
                 continue;
             }
 
-            if (m_LR0_action_table[i_x].size() > size_t(1))  // 大于 1 则说明有冲突
+            if (m_action_table[i_x].size() > size_t(1))  // 大于 1 则说明有冲突
                 grammar_flag = false;  // 不是该类型文法
 
             auto str = std::string("");
-            for (auto s : m_LR0_action_table[i_x])
+            for (auto s : m_action_table[i_x])
                 str += s;
 
             m_parsing_table[std::make_tuple(index_i_str, x)] = str;
@@ -929,24 +1144,31 @@ void M6::LRParsing::CreateParsingTable2(bool &grammar_flag)
         {
             auto i_x = std::make_tuple(index_i, x);
 
-            if (m_LR0_goto_table.find(i_x) == m_LR0_goto_table.end())
+            if (m_goto_table.find(i_x) == m_goto_table.end())
             {
                 m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
                 continue;
             }
 
             auto str = std::string("");
-            for (auto s : m_LR0_goto_table[i_x])
+            for (auto s : m_goto_table[i_x])
                 str += s;
 
             m_parsing_table[std::make_tuple(index_i_str, x)] = str;
         }
 
         auto str = std::string("");
-        for (auto s : m_LR0_action_table[std::make_tuple(index_i, m_end_of_file)])
+        for (auto s : m_action_table[std::make_tuple(index_i, m_end_of_file)])
             str += s;
         m_parsing_table[std::make_tuple(index_i_str, m_end_of_file)] = str;
     }
+}
+
+void M6::LRParsing::CopyDFA(std::map<std::tuple<size_t, Token>, size_t>& DFA)
+{
+    DFA.clear();
+    for (auto &i : m_DFA)
+        DFA[i.first] = i.second;
 }
 
 void M6::LRParsing::CopyParsingTable(std::map<std::tuple<std::string, Token>, std::string> &parsing_table)
