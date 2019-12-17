@@ -47,6 +47,8 @@ namespace M6
         using Item = std::tuple<Token, std::vector<Token>>;  // LR(0)/SLR(1) 项目类型
         using Item2 = std::tuple<Token, std::vector<Token>, std::set<Token>>;  // LR(1)/LALR(1) 项目类型
 
+        std::set<Token> GetLookAheadTokens(const std::set<Item2> &items_set, const Item &item);
+
     private:
         // 预处理部分
         // 包含生成 terminal 集合、拓广文法、生成规约项目表
@@ -97,6 +99,12 @@ namespace M6
         // 构建 SLR(1) ACTION/GOTO 表
         void BuildSLR1ParsingTable();
 
+        // 构造 LR(1) 文法的项目集族
+        void BuildItem2sSets();
+
+        // 创建 LR(1) 文法项目集中对应的 LR(0) 项目集
+        void CreateItemsSet1Map2();
+
         // 构建 LR(1) ACTION/GOTO 表
         void BuildLR1ParsingTable();
 
@@ -105,6 +113,12 @@ namespace M6
 
         // 创建 LR(0)/SLR(1) 分析表
         void CreateParsingTable1(bool &grammar_flag);
+
+        // 创建 LR(1) 分析表
+        void CreateParsingTable2(bool &grammar_flag);
+
+        // 拷贝分析表
+        void CopyParsingTable(std::map<std::tuple<std::string, Token>, std::string> &parsing_table);
 
     private:
         Token m_start_token;  // 文法中的起始符号
@@ -134,11 +148,12 @@ namespace M6
         bool m_LR1;  // 标记是否为 LR(1) 文法
 
         std::vector<std::set<Item>> m_items_sets_1;  // LR(0) 和 SLR(1) 项目集规范族
-        std::map< std::set<Item>, size_t> m_items_sets_1_map;  // 方便获取 m_items_sets_1 中项目集位置
+        std::map<std::set<Item>, size_t> m_items_sets_1_map;  // 方便获取 m_items_sets_1 中项目集位置
         std::map<std::tuple<size_t, Token>, size_t> m_LR0_DFA;  // 识别 LR(0) 和 SLR(1) 文法活前缀的 DFA
 
-        std::vector<std::set<Item2>> m_items_set_2;  // LR(1) 项目集族
-
+        std::vector<std::set<Item2>> m_items_sets_2;  // LR(1) 项目集族
+        std::map<std::set<Item2>, size_t> m_items_sets_2_map;  // 方便获取 m_items_sets_1 中项目集位置
+        std::map<size_t, std::set<Item>> m_items_sets_2_map_1;  // LR(1) 项目集中对应的 LR(0) 项目集
 
         std::map<std::tuple<size_t, Token>, std::set<std::string>> m_LR0_action_table;  // LR(0)/SLR(1) ACTION 表
         std::map<std::tuple<size_t, Token>, std::string> m_LR0_goto_table;  // LR(0)/SLR(1) GOTO 表
@@ -146,5 +161,10 @@ namespace M6
         std::map<std::tuple<std::set<size_t>, Token>, std::set<size_t>> m_goto_table;  // GOTO 表
 
         std::map<std::tuple<std::string, Token>, std::string> m_parsing_table;  // LR 分析表
+        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LR0;  // LR(0) 分析表
+        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_SLR1;  // SLR(1) 分析表
+        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LALR1;  // LALR(1) 分析表
+        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LR1;  // LR(1) 分析表
+
     };
 }
