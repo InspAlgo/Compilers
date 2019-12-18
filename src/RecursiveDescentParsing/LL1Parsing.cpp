@@ -3,22 +3,23 @@
 M6::LL1Parsing::LL1Parsing()
 {
     m_start_token = L"";
+    m_end_of_file = L"#";
     TokenNode::SetStaticData(L"$", 0);
 }
 
-void M6::LL1Parsing::SetStartToken(token start_token)
+void M6::LL1Parsing::SetStartToken(std::wstring start_token)
 {
     if (start_token.length() > 0)
         m_start_token = start_token;
     // TODO 应有 start_token 为空的警告
 }
 
-void M6::LL1Parsing::AddProduction(const token &production_left, const std::vector<token> &production_right)
+void M6::LL1Parsing::AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right)
 {
     // 这里不用进 m_productions 因为后面 CheckGrammar 阶段会重新进
-    m_productions_map[production_left].insert(production_right); // 使用集合，防止重复输入
+    m_productions_map[production_left].insert(production_right);  // 使用集合，防止重复输入
     m_nonterminal.insert(production_left);
-    m_first_s_set[std::make_tuple(production_left, production_right)] = std::set<token>();
+    m_select_set[std::make_tuple(production_left, production_right)] = std::set<token>();
 }
 
 void M6::LL1Parsing::RunParsing()
@@ -28,30 +29,29 @@ void M6::LL1Parsing::RunParsing()
     CalcNullable();
     CalcFirstSet();
     CalcFollowSet();
-    CalcFirstSSet();
+    CalcSelectSet();
     CalcPredictiveParsingTable();
 }
 
-void M6::LL1Parsing::GetFirstSSet(std::map<std::tuple<token, std::vector<token>>, std::set<token>> &first_s_set, bool sharp)
+void M6::LL1Parsing::GetFirstSet(std::map<std::wstring, std::set<std::wstring>> &first_set)
 {
-    auto set = sharp ? m_first_s_sharp_set : m_first_s_set;
-    for (auto i : set)
-        first_s_set[i.first] = i.second;
+    first_set.clear();
+    for (auto i : m_first_set)
+        first_set[i.first] = i.second;
 }
 
-void M6::LL1Parsing::GetFollowSet(std::map<token, std::set<token>> &follow_set, bool sharp)
+void M6::LL1Parsing::GetFollowSet(std::map<std::wstring, std::set<std::wstring>> &follow_set)
 {
-    auto set = sharp ? m_follow_sharp_set : m_follow_set;
-    for (auto i : set)
+    follow_set.clear();
+    for (auto i : m_follow_set)
         follow_set[i.first] = i.second;
 }
 
-void M6::LL1Parsing::GetPredictiveParsingTable(std::map<std::tuple<token, token>,
-                                                        std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table,
-                                               bool sharp)
+void M6::LL1Parsing::GetPredictiveParsingTable(std::map<std::tuple<std::wstring, std::wstring>,
+    std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &predictive_parsing_table)
 {
-    auto table = sharp ? m_predictive_parsing_table_sharp : m_predictive_parsing_table;
-    for (auto i : table)
+    predictive_parsing_table.clear();
+    for (auto i : m_predictive_parsing_table)
         predictive_parsing_table[i.first] = i.second;
 }
 
@@ -79,9 +79,7 @@ void M6::LL1Parsing::Clear()
     m_nullable.clear();
     m_first_set.clear();
     m_follow_set.clear();
-    m_follow_sharp_set.clear();
-    m_first_s_set.clear();
-    m_first_s_sharp_set.clear();
+    m_select_set.clear();
     m_predictive_parsing_table.clear();
     m_predictive_parsing_table_sharp.clear();
 
@@ -102,12 +100,12 @@ void M6::LL1Parsing::CheckGrammar()
     if (m_start_token.length() <= 0)
         return;
 
-    ExtractLeftFactoring();
-    RemovingIndirectLeftRecursion();
-    RemovingDirectLeftRecursion();
-    SimplifyGrammar();
+    //    ExtractLeftFactoring();
+    //    RemovingIndirectLeftRecursion();
+    //    RemovingDirectLeftRecursion();
+    //    SimplifyGrammar();
 
-    // 更新 m_productions m_terminal
+        // 更新 m_productions m_terminal
     m_productions.clear();
     m_terminal.clear();
     auto terminal = std::set<token>();
@@ -117,8 +115,8 @@ void M6::LL1Parsing::CheckGrammar()
         for (auto production : productions.second)
         {
             m_productions.push_back(std::make_tuple(productions.first, production));
-            for (auto t : production) // 遍历每个产生式从而得到所有终结符，但此时是包含有部分非终结符的
-                if (t.length() > 0)   // 不包含 epsilon
+            for (auto t : production)  // 遍历每个产生式从而得到所有终结符，但此时是包含有部分非终结符的
+                if (t.length() > 0)  // 不包含 epsilon
                     terminal.insert(t);
         }
     }
@@ -135,7 +133,7 @@ void M6::LL1Parsing::ExtractLeftFactoring()
 {
     for (auto &productions : m_productions_map)
     {
-        TokenNode *head = new TokenNode(productions.first);
+        TokenNode* head = new TokenNode(productions.first);
 
         // 构建公共前缀树(字典树)
         for (auto production : productions.second)
@@ -185,7 +183,8 @@ bool M6::LL1Parsing::IndirectLeftRecursionTokenClosure(token node, std::vector<t
 
     for (auto production : m_productions_map[node])
     {
-        if (m_nonterminal.find(production[0]) != m_nonterminal.end() && IndirectLeftRecursionTokenClosure(production[0], token_closure))
+        if (m_nonterminal.find(production[0]) != m_nonterminal.end()
+            && IndirectLeftRecursionTokenClosure(production[0], token_closure))
         {
             return true;
         }
@@ -237,26 +236,26 @@ void M6::LL1Parsing::RemovingDirectLeftRecursion()
 
         for (auto production : productions.second)
         {
-            if (production[0] == productions.first) // 因为提取了左因子，故形如 A->AX 的左递归最多只有一个式子
+            if (production[0] == productions.first)  // 因为提取了左因子，故形如 A->AX 的左递归最多只有一个式子
                 including_left = production;
             else
                 excluding_left.insert(production);
         }
 
-        if (!including_left.size()) // 没有左递归 A->a
+        if (!including_left.size())  // 没有左递归 A->a
             continue;
-        else if (!excluding_left.size()) // 有左递归，但是没有对应的消除策略 A->Aa
+        else if (!excluding_left.size())  // 有左递归，但是没有对应的消除策略 A->Aa
         {
             // TODO 无法消除的左递归
             continue;
         }
-        else // 有左递归，同时可以消除 A->AX|a
+        else  // 有左递归，同时可以消除 A->AX|a
         {
-            token new_token = productions.first + L"$"; // A -> A$，用 A$ 表示 A'
-            m_nonterminal.insert(new_token);            // 更新 nonterminal
+            token new_token = productions.first + L"$";  // A -> A$，用 A$ 表示 A'
+            m_nonterminal.insert(new_token);  // 更新 nonterminal
 
-            m_productions_map[new_token].insert(std::vector<token>{L""}); // A$->ε
-            auto new_production = std::vector<token>();                   // 准备 A$->XA$
+            m_productions_map[new_token].insert(std::vector<token>{L""});  // A$->ε
+            auto new_production = std::vector<token>();  // 准备 A$->XA$
 
             // 把 A->AX 变成 A$->XA$
             for (auto i = including_left.begin() + 1; i != including_left.end(); ++i)
@@ -314,11 +313,12 @@ void M6::LL1Parsing::TokenClosure(token node, std::set<token> &token_closure)
     {
         for (auto i : production)
         {
-            if (i.length() == 0) // 跳过推导为 ε 的产生式
+            if (i.length() == 0)  // 跳过推导为 ε 的产生式
                 break;
 
             // 非终结符且不在闭包集合中
-            if (m_nonterminal.find(i) != m_nonterminal.end() && token_closure.find(i) == token_closure.end())
+            if (m_nonterminal.find(i) != m_nonterminal.end()
+                && token_closure.find(i) == token_closure.end())
             {
                 TokenClosure(i, token_closure);
             }
@@ -330,45 +330,47 @@ void M6::LL1Parsing::InitSet()
 {
     m_first_set.clear();
     m_follow_set.clear();
-    m_follow_sharp_set.clear();
 
     for (auto nonterminal : m_nonterminal)
     {
         m_nullable[nonterminal] = false;
         m_first_set[nonterminal] = std::set<token>();
         m_follow_set[nonterminal] = std::set<token>();
-        m_follow_sharp_set[nonterminal] = std::set<token>();
     }
 }
 
 void M6::LL1Parsing::CalcNullable()
 {
-    auto is_changing = true; // 标记 nullable 在一轮迭代中是否发生改变
+    auto is_changing = true;  // 标记 nullable 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
 
         for (auto production : m_productions)
         {
+            auto left = std::get<0>(production);
+            auto right = std::get<1>(production);
+
             // 如果此非终结符已经判断为可空则跳过
-            if (m_nullable[std::get<0>(production)])
+            if (m_nullable[left])
                 continue;
 
             // 如果右部直接就是 ε，说明此非终结符可空
-            if (std::get<1>(production)[0].length() == 0)
+            if (!right.begin()->length())
             {
-                m_nullable[std::get<0>(production)] = true;
+                m_nullable[left] = true;
                 is_changing = true;
                 continue;
             }
 
             // 右部不是 ε，遍历产生式右部每一个符号
             auto flag = true;
-            for (auto beta_i : std::get<1>(production))
+            for (auto beta_i : right)
             {
                 // 遇到终结符，则此产生式的左部符号是不可空的
                 // 遇到非终结符，则判断此非终结符是否可空
-                if (m_nonterminal.find(beta_i) == m_nonterminal.end() || m_nullable[beta_i] == false)
+                if (m_nonterminal.find(beta_i) == m_nonterminal.end()
+                    || m_nullable[beta_i] == false)
                 {
                     flag = false;
                     break;
@@ -376,7 +378,7 @@ void M6::LL1Parsing::CalcNullable()
             }
             if (flag)
             {
-                m_nullable[std::get<0>(production)] = true;
+                m_nullable[left] = true;
                 is_changing = true;
             }
         }
@@ -385,34 +387,58 @@ void M6::LL1Parsing::CalcNullable()
 
 void M6::LL1Parsing::CalcFirstSet()
 {
-    auto is_changing = true; // 标记 FIRST 在一轮迭代中是否发生改变
+    auto is_changing = true;  // 标记 FIRST 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
 
-        for (auto production : m_productions)
+        for (auto &production : m_productions)
         {
-            auto N = std::get<0>(production);
-            auto count = m_first_set[N].size();
+            auto left = std::get<0>(production);
+            auto right = std::get<1>(production);
+
+            if (!right.begin()->length()) // epsilon
+            {
+                m_first_set[left].insert(std::wstring(L""));
+                continue;
+            }
+
+            auto count = m_first_set[left].size();
 
             // 右部不是 ε，遍历产生式右部每一个符号
-            for (auto beta_i : std::get<1>(production))
+            auto epsilon_count = static_cast<size_t>(0);
+            for (auto beta_i : right)
             {
                 // 是终结符，即不在非终结符集合中
                 if (m_nonterminal.find(beta_i) == m_nonterminal.end())
                 {
-                    m_first_set[N].insert(beta_i);
+                    m_first_set[left].insert(beta_i);
                     break;
                 }
-                else
+
+                // 非终结符不可推导出 epsilon
+                if (!m_nullable[beta_i])
                 {
-                    m_first_set[N].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
+                    m_first_set[left].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
                     if (!m_nullable[beta_i])
                         break;
                 }
+                else
+                {
+                    epsilon_count++;
+
+                    for (auto i : m_first_set[beta_i])
+                    {
+                        if (i.length())
+                            m_first_set[left].insert(i);
+                    }
+                }
             }
 
-            if (m_first_set[N].size() != count)
+            if (epsilon_count == right.size())
+                m_first_set[left].insert(std::wstring(L""));
+
+            if (m_first_set[left].size() != count)
                 is_changing = true;
         }
     }
@@ -420,25 +446,26 @@ void M6::LL1Parsing::CalcFirstSet()
 
 void M6::LL1Parsing::CalcFollowSet()
 {
-    // 不包含句子的右界符 # 的 FOLLOW
-    auto is_changing = true; // 标记 FOLLOW 在一轮迭代中是否发生改变
+    m_follow_set[m_start_token].insert(m_end_of_file);
+    auto is_changing = true;  // 标记 FOLLOW 在一轮迭代中是否发生改变
     while (is_changing)
     {
         is_changing = false;
 
         for (auto production : m_productions)
         {
-            auto production_right = std::get<1>(production);
+            auto right = std::get<1>(production);
 
-            if (std::get<1>(production)[0].length() == 0)
+            // 右部为 epsilon 直接跳过
+            if (!right.begin()->length())
                 continue;
 
-            auto N = std::get<0>(production);
-            auto count = m_follow_set[N].size();
-            auto temp = m_follow_set[N];
+            auto left = std::get<0>(production);
+            auto count = m_follow_set[left].size();
+            auto temp = m_follow_set[left];
 
-            // 右部不是 ε，逆序遍历产生式右部每一个符号
-            for (auto iter = production_right.rbegin(); iter != production_right.rend(); ++iter)
+            // 右部不是 epsilon，逆序遍历产生式右部每一个符号
+            for (auto iter = right.rbegin(); iter != right.rend(); ++iter)
             {
                 if (m_nonterminal.find((*iter)) == m_nonterminal.end())
                     (temp = std::set<token>()).insert((*iter));
@@ -452,87 +479,54 @@ void M6::LL1Parsing::CalcFollowSet()
                         is_changing = true;
 
                     if (!m_nullable[(*iter)])
-                        temp = m_first_set[(*iter)];
-                    else
-                        temp.insert(m_first_set[(*iter)].begin(), m_first_set[(*iter)].end());
+                        temp = std::set<token>();
+
+                    for (auto x : m_first_set[(*iter)])
+                    {
+                        if (x.length())
+                            temp.insert(x);
+                    }
                 }
             }
 
-            if (m_follow_set[N].size() != count)
-                is_changing = true;
-        }
-    }
-
-    // 包含句子的右界符 # 的 FOLLOW 集合
-    is_changing = true; // 标记 FOLLOW 在一轮迭代中是否发生改变
-    m_follow_sharp_set[m_start_token].insert(L"#");
-    while (is_changing)
-    {
-        is_changing = false;
-
-        for (auto production : m_productions)
-        {
-            auto production_right = std::get<1>(production);
-
-            if (std::get<1>(production)[0].length() == 0)
-                continue;
-
-            auto N = std::get<0>(production);
-            auto count = m_follow_sharp_set[N].size();
-            auto temp = m_follow_sharp_set[N];
-
-            // 右部不是 ε，逆序遍历产生式右部每一个符号
-            for (auto iter = production_right.rbegin(); iter != production_right.rend(); ++iter)
-            {
-                if (m_nonterminal.find((*iter)) == m_nonterminal.end())
-                    (temp = std::set<token>()).insert((*iter));
-                else
-                {
-                    auto count2 = m_follow_sharp_set[(*iter)].size();
-
-                    m_follow_sharp_set[(*iter)].insert(temp.begin(), temp.end());
-
-                    if (m_follow_sharp_set[(*iter)].size() != count2)
-                        is_changing = true;
-
-                    if (!m_nullable[(*iter)])
-                        temp = m_first_set[(*iter)];
-                    else
-                        temp.insert(m_first_set[(*iter)].begin(), m_first_set[(*iter)].end());
-                }
-            }
-
-            if (m_follow_sharp_set[N].size() != count)
+            if (m_follow_set[left].size() != count)
                 is_changing = true;
         }
     }
 }
 
-void M6::LL1Parsing::CalcFirstSSet()
+void M6::LL1Parsing::CalcSelectSet()
 {
-    // 不包含句子的右界符 # 的 FIRST_S
-    for (auto production : m_productions)
+    for (auto &production : m_productions)
     {
         auto flag = true;
+        auto right = std::get<1>(production);
 
-        for (auto beta_i : std::get<1>(production))
+        for (auto beta_i : right)
         {
-            if (beta_i.length() == 0) // 右部是 ε 则跳过
-                continue;
+            if (!right.begin()->length())
+                break;
 
             if (m_nonterminal.find(beta_i) == m_nonterminal.end())
             {
-                m_first_s_set[production].insert(beta_i);
+                m_select_set[production].insert(beta_i);
+                flag = false;
+                break;
+            }
+
+            // 非终结符不可推导出 epsilon
+            if (!m_nullable[beta_i])
+            {
+                m_select_set[production].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
                 flag = false;
                 break;
             }
             else
             {
-                m_first_s_set[production].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
-                if (!m_nullable[beta_i])
+                for (auto x : m_first_set[beta_i])
                 {
-                    flag = false;
-                    break;
+                    if (x.length())
+                        m_select_set[production].insert(x);
                 }
             }
         }
@@ -540,49 +534,14 @@ void M6::LL1Parsing::CalcFirstSSet()
         if (flag)
         {
             auto temp = m_follow_set[std::get<0>(production)];
-            m_first_s_set[production].insert(temp.begin(), temp.end());
-        }
-    }
-
-    // 包含句子的右界符 # 的 FIRST_S
-    for (auto production : m_productions)
-    {
-        auto flag = true;
-
-        for (auto beta_i : std::get<1>(production))
-        {
-            if (beta_i.length() == 0) // 右部是 ε 则跳过
-                continue;
-
-            if (m_nonterminal.find(beta_i) == m_nonterminal.end())
-            {
-                m_first_s_sharp_set[production].insert(beta_i);
-                flag = false;
-                break;
-            }
-            else
-            {
-                m_first_s_sharp_set[production].insert(m_first_set[beta_i].begin(), m_first_set[beta_i].end());
-                if (!m_nullable[beta_i])
-                {
-                    flag = false;
-                    break;
-                }
-            }
-        }
-
-        if (flag)
-        {
-            auto temp = m_follow_sharp_set[std::get<0>(production)];
-            m_first_s_sharp_set[production].insert(temp.begin(), temp.end());
+            m_select_set[production].insert(temp.begin(), temp.end());
         }
     }
 }
 
 void M6::LL1Parsing::CalcPredictiveParsingTable()
 {
-    // 不包含句子的右界符 #
-    for (auto i : m_first_s_set)
+    for (auto i : m_select_set)
     {
         for (auto j : i.second)
         {
@@ -593,22 +552,9 @@ void M6::LL1Parsing::CalcPredictiveParsingTable()
             m_predictive_parsing_table[std::make_tuple(N, T)].insert(production);
         }
     }
-
-    // 包含句子的右界符 #
-    for (auto i : m_first_s_sharp_set)
-    {
-        for (auto j : i.second)
-        {
-            auto N = std::get<0>(i.first);
-            auto T = j;
-            auto production = i.first;
-
-            m_predictive_parsing_table_sharp[std::make_tuple(N, T)].insert(production);
-        }
-    }
 }
 
-M6::token M6::LL1Parsing::TokenNode::m_temp_token = L"$";
+M6::LL1Parsing::token M6::LL1Parsing::TokenNode::m_temp_token = L"$";
 int M6::LL1Parsing::TokenNode::m_production_idx = 0;
 
 M6::LL1Parsing::TokenNode::TokenNode(token data)
@@ -624,7 +570,7 @@ void M6::LL1Parsing::TokenNode::SetStaticData(token temp_token, int idx)
     m_production_idx = idx;
 }
 
-M6::token M6::LL1Parsing::TokenNode::GetNewToken()
+M6::LL1Parsing::token M6::LL1Parsing::TokenNode::GetNewToken()
 {
     token new_token = m_temp_token + std::to_wstring(m_production_idx);
     m_production_idx++;
@@ -668,7 +614,7 @@ void M6::LL1Parsing::TokenNode::AddDifferentNodes(std::vector<token> &production
     }
 
     // production 较先遍历完，故此结点的兄弟结点中添加 ε 结点
-    if (idx >= production.size() && m_left_ptr != nullptr)
+    if (size_t(idx) >= production.size() && m_left_ptr != nullptr)
     {
         auto end_ptr = this;
         while (end_ptr->m_right_ptr != nullptr && end_ptr->m_token != L"")
@@ -680,13 +626,13 @@ void M6::LL1Parsing::TokenNode::AddDifferentNodes(std::vector<token> &production
     }
 
     // 与本结点值相同，进入子结点找不同
-    if (m_token == production[idx])
+    if (m_token == production[size_t(idx)])
     {
         // 没有子结点
         if (m_left_ptr == nullptr)
         {
             // production 同时遍历完
-            if (idx == production.size() - 1)
+            if (idx == int(production.size()) - 1)
                 return;
 
             // production 未遍历完
@@ -694,20 +640,20 @@ void M6::LL1Parsing::TokenNode::AddDifferentNodes(std::vector<token> &production
             m_left_ptr->AddDifferentNodes(production, idx + 1);
             return;
         }
-        else // 有子结点
+        else  // 有子结点
         {
             m_left_ptr->AddDifferentNodes(production, idx + 1);
             return;
         }
     }
-    else // 与本结点值不同
+    else  // 与本结点值不同
     {
         // 进入兄弟结点找
         for (auto ptr = m_right_ptr; ptr != nullptr; ptr = ptr->m_right_ptr)
         {
-            if (ptr->m_token == production[idx]) // 发现相同
+            if (ptr->m_token == production[size_t(idx)])  // 发现相同
             {
-                ptr->AddDifferentNodes(production, idx); // 兄弟结点位于同一层次，故 idx 不变
+                ptr->AddDifferentNodes(production, idx);  // 兄弟结点位于同一层次，故 idx 不变
                 return;
             }
         }
@@ -720,7 +666,7 @@ void M6::LL1Parsing::TokenNode::AddDifferentNodes(std::vector<token> &production
 
         for (auto i = production.rbegin(); i != production.rend(); ++i)
         {
-            if ((idx - 1 >= 0) && ((*i) == production[idx - 1]))
+            if ((idx - 1 >= 0) && ((*i) == production[size_t(idx - 1)]))
                 break;
 
             // 头插法
@@ -778,9 +724,9 @@ void M6::LL1Parsing::TokenNode::DestroyChildNodes()
     不同的兄弟结点说明是有不同的 vector，故用 idx 进行区分
 */
 void M6::LL1Parsing::TokenNode::CreateNewProductions(token production_left, int idx,
-                                                     std::map<std::tuple<token, int>, std::vector<token>> &productions_map)
+    std::map<std::tuple<token, int>, std::vector<token>> &productions_map)
 {
-    if (idx == -1) // 单独处理根结点
+    if (idx == -1)  // 单独处理根结点
     {
         m_left_ptr->CreateNewProductions(production_left, idx + 1, productions_map);
         return;

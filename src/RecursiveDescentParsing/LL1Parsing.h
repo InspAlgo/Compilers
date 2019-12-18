@@ -9,22 +9,23 @@
 
 namespace M6
 {
-    using token = std::wstring;
-
     class LL1Parsing
     {
     public:
         LL1Parsing();
-        void SetStartToken(token start_token);
-        void AddProduction(const token &production_left, const std::vector<token> &production_right);  // 添加一条产生式
+        void SetStartToken(std::wstring start_token);
+        void AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right);  // 添加一条产生式
         void RunParsing();
-        void GetFirstSSet(std::map<std::tuple<token, std::vector<token>>, std::set<token>> &first_s_set, bool sharp = false);  // 获取 FIRST
-        void GetFollowSet(std::map<token, std::set<token>> &follow_set, bool sharp = false);  // 获取 FOLLOW 集合
-        void GetPredictiveParsingTable(std::map<std::tuple<token, token>,
-            std::set<std::tuple<token, std::vector<token>>>> &predictive_parsing_table, bool sharp = false);  // 获取预测分析表
-        void GetTerminalSet(std::set<token> &terminal);  // 获取终结符集合
-        void GetNonterminalSet(std::set<token> &nonterminal);  // 获取非终结符集合
+        void GetFirstSet(std::map<std::wstring, std::set<std::wstring>> &first_set);  // 获取 FIRST 集
+        void GetFollowSet(std::map<std::wstring, std::set<std::wstring>> &follow_set);  // 获取 FOLLOW 集
+        void GetPredictiveParsingTable(std::map<std::tuple<std::wstring, std::wstring>,
+            std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &predictive_parsing_table);  // 获取预测分析表
+        void GetTerminalSet(std::set<std::wstring> &terminal);  // 获取终结符集合
+        void GetNonterminalSet(std::set<std::wstring> &nonterminal);  // 获取非终结符集合
         void Clear();  // 清空类中所有成员容器的内部元素
+
+    private:
+        using token = std::wstring;
 
     private:
         void CheckGrammar();  // 检查并修正文法，使之满足 LL(1) 文法规范
@@ -39,7 +40,7 @@ namespace M6
         void CalcNullable();  // 不动点算法求 nullable
         void CalcFirstSet();  // 不动点算法求 FIRST
         void CalcFollowSet();  // 不动点算法求 FOLLOW
-        void CalcFirstSSet();  // 求 FIRST_S
+        void CalcSelectSet();  // 求 FIRST_S
         void CalcPredictiveParsingTable();  // 求预测分析表
 
         // 用于构建产生式的语法树，通过公共结点提取左因子，构造字典树的思路
@@ -63,18 +64,16 @@ namespace M6
         };
 
         token m_start_token;
+        token m_end_of_file;
         std::set<token> m_nonterminal;  // 非终结符集合
         std::set<token> m_terminal;  // 终结符集合
         std::vector<std::tuple<token, std::vector<token>>> m_productions;  // 所有产生式左部非终结符，vector 里存放该非终结符对应的所有右部
         std::map<token, std::set<std::vector<token>>> m_productions_map;
         std::map<token, bool> m_nullable;  // 非终结符是否可空
-        std::map<token, std::set<token>> m_first_set;  // FIRST 集合，非终结符的 FIRST，未进行推广，下面的 FIRST_S 集合进行了推广
-        std::map<token, std::set<token>> m_follow_set;  // FOLLOW 集合，国外教材对 FOLLOW 的定义中一般不包含句子的右界符 #
-        std::map<token, std::set<token>> m_follow_sharp_set;  // 带有 # 的 FOLLOW 集合，国内教材对 FOLLOW 的定义中一般包含句子的右界符 #
+        std::map<token, std::set<token>> m_first_set;  // FIRST 集 (非推广形式)
+        std::map<token, std::set<token>> m_follow_set;  // FOLLOW 集
         std::map<std::tuple<token, std::vector<token>>,
-            std::set<token>> m_first_s_set;  // FIRST_S 集合，即将一个 FIRST 的计算推广到一个串或一个句子上面
-        std::map<std::tuple<token, std::vector<token>>,
-            std::set<token>> m_first_s_sharp_set;  // 带有句子的右界符 # 的 FIRST_S 集合
+            std::set<token>> m_select_set;  // FIRST_S 集合
         std::map<std::tuple<token, token>,
             std::set<std::tuple<token, std::vector<token>>>> m_predictive_parsing_table;  // 预测分析表
         std::map<std::tuple<token, token>,
