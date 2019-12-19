@@ -77,26 +77,32 @@ void M6::LRParsing::Clear()
     m_parsing_table_SLR1.clear();
     m_parsing_table_LALR1.clear();
     m_parsing_table_LR1.clear();
+
+    m_input_tokens.clear();
+    m_state_stack.clear();
+    m_tokens_stack.clear();
+    m_parsing_action_stack.clear();
+    m_parsing_process.clear();
 }
 
-void M6::LRParsing::SetStartToken(const std::wstring& start_token, const std::wstring& new_start_token)
+void M6::LRParsing::SetStartToken(const std::wstring &start_token, const std::wstring &new_start_token)
 {
     m_start_token = start_token;
     m_new_start_token = new_start_token;
 }
 
-void M6::LRParsing::SetDot(const std::wstring& dot)
+void M6::LRParsing::SetDot(const std::wstring &dot)
 {
     m_dot = dot;
 }
 
-void M6::LRParsing::SetEndOfFile(const std::wstring& end_of_file)
+void M6::LRParsing::SetEndOfFile(const std::wstring &end_of_file)
 {
     m_end_of_file = end_of_file;
 }
 
-void M6::LRParsing::AddProduction(const std::wstring& production_left,
-    const std::vector<std::wstring>& production_right)
+void M6::LRParsing::AddProduction(const std::wstring &production_left,
+    const std::vector<std::wstring> &production_right)
 {
     m_nonterminals.insert(production_left);
     m_original_grammar[production_left].insert(production_right);
@@ -162,12 +168,12 @@ std::wstring M6::LRParsing::GetGrammarType()
     return m_LR0 ? std::wstring(L"LR(0)") : (m_SLR1 ? std::wstring(L"SLR(1)") : (m_LALR1 ? std::wstring(L"LALR(1)") : (m_LR1 ? std::wstring(L"LR(1)") : std::wstring(L"Not LR Grammar"))));
 }
 
-void M6::LRParsing::GetParsingTable(std::map<std::tuple<std::wstring, std::wstring>, std::wstring>& parsing_table)
+void M6::LRParsing::GetParsingTable(std::map<std::tuple<std::wstring, std::wstring>, std::wstring> &parsing_table)
 {
     CopyParsingTable(m_parsing_table, parsing_table);
 }
 
-void M6::LRParsing::ParsingTokens(const std::vector<std::wstring>& input_tokens, std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>>& parsing_process)
+void M6::LRParsing::ParsingTokens(const std::vector<std::wstring> &input_tokens, std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>> &parsing_process)
 {
     if (!(m_LR0 || m_SLR1 || m_LALR1 || m_LR1))
         return;
@@ -186,7 +192,7 @@ void M6::LRParsing::ParsingTokens(const std::vector<std::wstring>& input_tokens,
         parsing_process.push_back(i);
 }
 
-std::set<M6::LRParsing::Token> M6::LRParsing::GetLookAheadTokens(const std::set<M6::LRParsing::ItemLR1>& items_set, const M6::LRParsing::ItemLR0& item)
+std::set<M6::LRParsing::Token> M6::LRParsing::GetLookAheadTokens(const std::set<M6::LRParsing::ItemLR1> &items_set, const M6::LRParsing::ItemLR0 &item)
 {
     auto re = std::set<Token>();
 
@@ -280,7 +286,7 @@ void M6::LRParsing::CreateReductionItemTable()
         auto production = std::get<1>(m_expanding_grammar[i]);
 
         if (production.begin()->length())  // 如果右部不是 epsilon
-            production.push_back(m_dot);  // 规约项目即产生式最后面加个 dot 符号
+            production.push_back(m_dot);  // 归约项目即产生式最后面加个 dot 符号
         else  // 右部是 epsilon
             (*production.begin()) = m_dot;  // 仅有项目 A->·
 
@@ -455,7 +461,7 @@ void M6::LRParsing::CreateFollowSet()
     }
 }
 
-void M6::LRParsing::Closure(std::set<ItemLR0>& items_set)
+void M6::LRParsing::Closure(std::set<ItemLR0> &items_set)
 {
     auto count = static_cast<size_t>(0);
 
@@ -491,7 +497,7 @@ void M6::LRParsing::Closure(std::set<ItemLR0>& items_set)
     }
 }
 
-void M6::LRParsing::Closure(std::set<ItemLR1>& items_set)
+void M6::LRParsing::Closure(std::set<ItemLR1> &items_set)
 {
     auto count = static_cast<size_t>(1);
     auto items_set_temp = std::set<ItemLR1>();
@@ -571,7 +577,7 @@ void M6::LRParsing::Closure(std::set<ItemLR1>& items_set)
         items_set.insert(std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), i.second));
 }
 
-std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0>& items_set, const Token& x)
+std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0> &items_set, const Token &x)
 {
     auto re = std::set<ItemLR0>();
 
@@ -600,7 +606,7 @@ std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0>& item
     return re;
 }
 
-std::set<M6::LRParsing::ItemLR1> M6::LRParsing::Go(const std::set<ItemLR1>& items_set, const Token& x)
+std::set<M6::LRParsing::ItemLR1> M6::LRParsing::Go(const std::set<ItemLR1> &items_set, const Token &x)
 {
     auto re = std::set<ItemLR1>();
 
@@ -879,7 +885,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
 
         auto start_item = ItemLR1();
 
-        // 2. 若规约项目 [A->α·,a] 属于 I_k 则向前查看符 a 置 Action[k,a]=r_j (假定 A->α 为文法的第j条规则)
+        // 2. 若归约项目 [A->α·,a] 属于 I_k 则向前查看符 a 置 Action[k,a]=r_j (假定 A->α 为文法的第j条规则)
         for (auto &i : m_reduction_items)
         {
             auto reduction_item = i.first;
@@ -926,7 +932,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
     CreateParsingTable(m_LR1, m_items_sets_LR1, m_items_sets_LR1_map);
 }
 
-void M6::LRParsing::MergeLookAheadTokens(const std::set<size_t>& same_cores_set, const size_t& index)
+void M6::LRParsing::MergeLookAheadTokens(const std::set<size_t> &same_cores_set, const size_t &index)
 {
     auto item_map_tokens = std::map<ItemLR0, std::set<Token>>();
     auto items_set = std::set<ItemLR0>();
@@ -1033,7 +1039,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
 
         auto start_item = ItemLR1();
 
-        // 2. 若规约项目 [A->α·,a] 属于 I_k 则向前查看符 a 置 Action[k,a]=r_j (假定 A->α 为文法的第j条规则)
+        // 2. 若归约项目 [A->α·,a] 属于 I_k 则向前查看符 a 置 Action[k,a]=r_j (假定 A->α 为文法的第j条规则)
         for (auto &i : m_reduction_items)
         {
             auto reduction_item = i.first;
@@ -1080,7 +1086,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
     CreateParsingTable(m_LALR1, m_items_sets_LALR1, m_items_sets_LALR1_map);
 }
 
-void M6::LRParsing::CreateParsingTable(bool& grammar_flag)
+void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
 {
     grammar_flag = true;
     m_parsing_table.clear();
@@ -1136,7 +1142,7 @@ void M6::LRParsing::CreateParsingTable(bool& grammar_flag)
     }
 }
 
-void M6::LRParsing::CreateParsingTable(bool& grammar_flag, const std::vector<std::set<ItemLR1>>& items_sets, const std::map<std::set<ItemLR1>, size_t>& items_sets_map)
+void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std::set<ItemLR1>> &items_sets, const std::map<std::set<ItemLR1>, size_t> &items_sets_map)
 {
     grammar_flag = true;
     m_parsing_table.clear();
@@ -1195,14 +1201,14 @@ void M6::LRParsing::CreateParsingTable(bool& grammar_flag, const std::vector<std
     }
 }
 
-void M6::LRParsing::CopyDFA(std::map<std::tuple<size_t, Token>, size_t>& DFA)
+void M6::LRParsing::CopyDFA(std::map<std::tuple<size_t, Token>, size_t> &DFA)
 {
     DFA.clear();
     for (auto &i : m_DFA)
         DFA[i.first] = i.second;
 }
 
-void M6::LRParsing::CopyParsingTable(std::map<std::tuple<std::wstring, Token>, std::wstring>& from_parsing_table, std::map<std::tuple<std::wstring, Token>, std::wstring>& to_parsing_table)
+void M6::LRParsing::CopyParsingTable(std::map<std::tuple<std::wstring, Token>, std::wstring> &from_parsing_table, std::map<std::tuple<std::wstring, Token>, std::wstring> &to_parsing_table)
 {
     to_parsing_table.clear();
     for (auto &i : from_parsing_table)
@@ -1254,9 +1260,9 @@ bool M6::LRParsing::RunCurStep(int step_count)
         m_input_tokens.pop_back();
         std::get<4>(m_cur_parsing_data) = temp;
     }
-    else if (temp.front() == char('r'))  // parsing_table[S,a] == r_j 规约动作
+    else if (temp.front() == char('r'))  // parsing_table[S,a] == r_j 归约动作
     {
-        // 用第 j 条规则 A->α 规约
+        // 用第 j 条规则 A->α 归约
         auto production = m_expanding_grammar[std::stoull(temp.substr(size_t(1)))];
 
         // 将 |α| 个状态和 |α| 个输入符号退栈
@@ -1285,7 +1291,7 @@ bool M6::LRParsing::RunCurStep(int step_count)
     return true;
 }
 
-void M6::LRParsing::ParsingStackToString(int index, std::wstring parsing_action)
+void M6::LRParsing::ParsingStackToString(int step_count, std::wstring parsing_action)
 {
     auto state_stack_str = std::wstring(L"");
     for (auto i : m_state_stack)
@@ -1299,5 +1305,5 @@ void M6::LRParsing::ParsingStackToString(int index, std::wstring parsing_action)
     for (auto i = m_input_tokens.rbegin(); i != m_input_tokens.rend(); ++i)
         input_tokens_str += (*i) + std::wstring(L" ");
 
-    m_cur_parsing_data = std::make_tuple(std::to_wstring(index), state_stack_str, tokens_stack_str, input_tokens_str, parsing_action);
+    m_cur_parsing_data = std::make_tuple(std::to_wstring(step_count), state_stack_str, tokens_stack_str, input_tokens_str, parsing_action);
 }
