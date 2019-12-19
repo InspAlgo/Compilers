@@ -22,25 +22,32 @@ namespace M6
         void Clear();
 
         // 设置文法中的起始符号和拓广文法中的新起始符号
-        void SetStartToken(const std::wstring &start_token, const std::wstring &new_start_token);
+        void SetStartToken(const std::wstring& start_token, const std::wstring& new_start_token);
 
         // 设置一个项目里的点号
         // Clear 后不会恢复成默认值
-        void SetDot(const std::wstring &dot);
+        void SetDot(const std::wstring& dot);
 
         // 设置文件结束符，即左界符或右界符
         // Clear 后不会恢复成默认值
-        void SetEndOfFile(const std::wstring &end_of_file);
+        void SetEndOfFile(const std::wstring& end_of_file);
 
         // 添加产生式
-        void AddProduction(const std::wstring &production_left, const std::vector<std::wstring> &production_right);
+        void AddProduction(const std::wstring& production_left, const std::vector<std::wstring>& production_right);
 
         // 构建 LR 分析表
         void BuildLRParsingTable();
 
         // 获取文法类型
         // 返回 0-非LR文法 1-LR(0)文法 2-SLR(1)文法 3-LALR(1)文法 4-LR(1)文法
-        std::string GetGrammarType();
+        std::wstring GetGrammarType();
+
+        // 获取文法分析表
+        void GetParsingTable(std::map<std::tuple<std::wstring, std::wstring>, std::wstring>& parsing_table);
+
+    public:
+        // 分析输入符号串，末尾不带右界符，由本函数自动添加，返回分析过程
+        void ParsingTokens(const std::vector<std::wstring>& input_tokens, std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>>& parsing_process);
 
     private:
         using Token = std::wstring;  // 符号类型
@@ -75,19 +82,19 @@ namespace M6
         void CreateFollowSet();
 
         // LR(0)/SLR(1) 文法的闭包函数
-        void Closure(std::set<ItemLR0> &items_set);
+        void Closure(std::set<ItemLR0>& items_set);
 
         // LR(1)/LALR(1) 文法的闭包函数
-        void Closure(std::set<ItemLR1> &items_set);
+        void Closure(std::set<ItemLR1>& items_set);
 
         // LR(0)/SLR(1) 文法的状态转移函数
-        std::set<ItemLR0> Go(const std::set<ItemLR0> &items_set, const Token &x);
+        std::set<ItemLR0> Go(const std::set<ItemLR0>& items_set, const Token& x);
 
         // LR(1)/LALR(1) 文法的状态转移函数
-        std::set<ItemLR1> Go(const std::set<ItemLR1> &items_set, const Token &x);
+        std::set<ItemLR1> Go(const std::set<ItemLR1>& items_set, const Token& x);
 
         // 获取 LR(1) 项目集类型 set{[A->α·β,a],...,[B->r·,b]} 中规约项目 B->r· 的向前查看符 b
-        std::set<Token> GetLookAheadTokens(const std::set<ItemLR1> &items_set, const ItemLR0 &item);
+        std::set<Token> GetLookAheadTokens(const std::set<ItemLR1>& items_set, const ItemLR0& item);
 
         // 构造识别 LR(0)/SLR(1) 文法规范句型活前缀 DFA
         // 即构造 LR(0)/SLR(1) 文法的项目集规范族
@@ -109,7 +116,7 @@ namespace M6
         void BuildLR1ParsingTable();
 
         // 合并同心集的向前查看符
-        void MergeLookAheadTokens(const std::set<size_t> &same_cores_set, const size_t &index);
+        void MergeLookAheadTokens(const std::set<size_t>& same_cores_set, const size_t& index);
 
         // 构建 LALR(1) 项目集
         // 调用 MergeLookAheadTokens() 方法
@@ -123,16 +130,26 @@ namespace M6
         void BuildLALR1ParsingTable();
 
         // 创建 LR(0)/SLR(1) 分析表
-        void CreateParsingTable(bool &grammar_flag);
+        void CreateParsingTable(bool& grammar_flag);
 
         // 创建 LR(1)/LALR(1) 分析表
-        void CreateParsingTable(bool &grammar_flag, const std::vector<std::set<ItemLR1>> &items_sets, const std::map<std::set<ItemLR1>, size_t> &items_sets_3_map);
+        void CreateParsingTable(bool& grammar_flag, const std::vector<std::set<ItemLR1>>& items_sets, const std::map<std::set<ItemLR1>, size_t>& items_sets_3_map);
 
         // 拷贝 DFA
-        void CopyDFA(std::map<std::tuple<size_t, Token>, size_t> &DFA);
+        void CopyDFA(std::map<std::tuple<size_t, Token>, size_t>& DFA);
 
-        // 拷贝分析表
-        void CopyParsingTable(std::map<std::tuple<std::string, Token>, std::string> &parsing_table);
+        // 拷贝分析表到具体类型的分析表中
+        void CopyParsingTable(std::map<std::tuple<std::wstring, Token>, std::wstring>& from_parsing_table, std::map<std::tuple<std::wstring, Token>, std::wstring>& to_parsing_table);
+
+    private:
+        // 总控程序，也称驱动程序，对于所有的 LR 分析器其总控程序是相同的
+        void Control();
+
+        // 执行当前步骤
+        bool RunCurStep(int step_count);
+
+        // 将分析栈中的数据转成字符串
+        void ParsingStackToString(int index, std::wstring parsing_action);
 
     private:
         bool m_LR0;  // 标记是否为 LR(0) 文法
@@ -179,13 +196,21 @@ namespace M6
         std::map<std::tuple<size_t, Token>, size_t> m_DFA_LALR1;  // LR(1) 项目集的 DFA
         std::map<std::tuple<size_t, Token>, size_t> m_DFA_LR1;  // LALR(1) 项目集的 DFA
 
-        std::map<std::tuple<size_t, Token>, std::set<std::string>> m_action_table;  //  当前文法 ACTION 表
-        std::map<std::tuple<size_t, Token>, std::string> m_goto_table;  //  当前文法 GOTO 表
+        std::map<std::tuple<size_t, Token>, std::set<std::wstring>> m_action_table;  //  当前文法 ACTION 表
+        std::map<std::tuple<size_t, Token>, std::wstring> m_goto_table;  //  当前文法 GOTO 表
 
-        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table;  //  当前文法 LR 分析表
-        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LR0;  // LR(0) 分析表
-        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_SLR1;  // SLR(1) 分析表
-        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LALR1;  // LALR(1) 分析表
-        std::map<std::tuple<std::string, Token>, std::string> m_parsing_table_LR1;  // LR(1) 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table;  //  当前文法 LR 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LR0;  // LR(0) 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_SLR1;  // SLR(1) 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LALR1;  // LALR(1) 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LR1;  // LR(1) 分析表
+
+    private:
+        std::vector<Token> m_input_tokens;  // 输入符号串
+        std::vector<std::wstring> m_state_stack;  // 状态栈
+        std::vector<Token> m_tokens_stack;  // 符号栈
+        std::vector<std::wstring> m_parsing_action_stack;  // 分析动作栈
+        std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring> m_cur_parsing_data;  // 当前分析数据
+        std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>> m_parsing_process;  // 分析过程
     };
 }

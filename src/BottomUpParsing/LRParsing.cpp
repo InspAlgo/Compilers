@@ -79,24 +79,24 @@ void M6::LRParsing::Clear()
     m_parsing_table_LR1.clear();
 }
 
-void M6::LRParsing::SetStartToken(const std::wstring &start_token, const std::wstring &new_start_token)
+void M6::LRParsing::SetStartToken(const std::wstring& start_token, const std::wstring& new_start_token)
 {
     m_start_token = start_token;
     m_new_start_token = new_start_token;
 }
 
-void M6::LRParsing::SetDot(const std::wstring &dot)
+void M6::LRParsing::SetDot(const std::wstring& dot)
 {
     m_dot = dot;
 }
 
-void M6::LRParsing::SetEndOfFile(const std::wstring &end_of_file)
+void M6::LRParsing::SetEndOfFile(const std::wstring& end_of_file)
 {
     m_end_of_file = end_of_file;
 }
 
-void M6::LRParsing::AddProduction(const std::wstring &production_left,
-    const std::vector<std::wstring> &production_right)
+void M6::LRParsing::AddProduction(const std::wstring& production_left,
+    const std::vector<std::wstring>& production_right)
 {
     m_nonterminals.insert(production_left);
     m_original_grammar[production_left].insert(production_right);
@@ -117,7 +117,7 @@ void M6::LRParsing::BuildLRParsingTable()
     if (m_LR0)
     {
         CopyDFA(m_DFA_LR0orSLR1);
-        CopyParsingTable(m_parsing_table_LR0);
+        CopyParsingTable(m_parsing_table, m_parsing_table_LR0);
         return;
     }
 
@@ -126,7 +126,7 @@ void M6::LRParsing::BuildLRParsingTable()
     if (m_SLR1)
     {
         CopyDFA(m_DFA_LR0orSLR1);
-        CopyParsingTable(m_parsing_table_SLR1);
+        CopyParsingTable(m_parsing_table, m_parsing_table_SLR1);
         return;
     }
 
@@ -139,7 +139,7 @@ void M6::LRParsing::BuildLRParsingTable()
     if (m_LR1)
     {
         CopyDFA(m_DFA_LR1);
-        CopyParsingTable(m_parsing_table_LR1);
+        CopyParsingTable(m_parsing_table, m_parsing_table_LR1);
 
         BuildItem3sSets();
 
@@ -151,18 +151,45 @@ void M6::LRParsing::BuildLRParsingTable()
     if (m_LALR1)
     {
         CopyDFA(m_DFA_LALR1);
-        CopyParsingTable(m_parsing_table_LALR1);
+        CopyParsingTable(m_parsing_table, m_parsing_table_LALR1);
     }
+    else
+        CopyParsingTable(m_parsing_table_LR1, m_parsing_table);
 }
 
-std::string M6::LRParsing::GetGrammarType()
+std::wstring M6::LRParsing::GetGrammarType()
 {
-    return m_LR0 ? std::string("LR(0)") : (m_SLR1 ? std::string("SLR(1)") : (m_LALR1 ? std::string("LALR(1)") : (m_LR1 ? std::string("LR(1)") : std::string("Not LR Grammar"))));
+    return m_LR0 ? std::wstring(L"LR(0)") : (m_SLR1 ? std::wstring(L"SLR(1)") : (m_LALR1 ? std::wstring(L"LALR(1)") : (m_LR1 ? std::wstring(L"LR(1)") : std::wstring(L"Not LR Grammar"))));
 }
 
-std::set<M6::LRParsing::Token> M6::LRParsing::GetLookAheadTokens(const std::set<M6::LRParsing::ItemLR1> &items_set, const M6::LRParsing::ItemLR0 &item)
+void M6::LRParsing::GetParsingTable(std::map<std::tuple<std::wstring, std::wstring>, std::wstring>& parsing_table)
+{
+    CopyParsingTable(m_parsing_table, parsing_table);
+}
+
+void M6::LRParsing::ParsingTokens(const std::vector<std::wstring>& input_tokens, std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>>& parsing_process)
+{
+    if (!(m_LR0 || m_SLR1 || m_LALR1 || m_LR1))
+        return;
+
+    m_input_tokens.clear();
+    parsing_process.clear();
+
+    m_input_tokens.push_back(m_end_of_file);
+
+    for (auto i = input_tokens.rbegin(); i != input_tokens.rend(); ++i)
+        m_input_tokens.push_back(*i);
+
+    Control();
+
+    for (auto &i : m_parsing_process)
+        parsing_process.push_back(i);
+}
+
+std::set<M6::LRParsing::Token> M6::LRParsing::GetLookAheadTokens(const std::set<M6::LRParsing::ItemLR1>& items_set, const M6::LRParsing::ItemLR0& item)
 {
     auto re = std::set<Token>();
+
     for (auto &i : items_set)
     {
         if (std::make_tuple(std::get<0>(i), std::get<1>(i)) == item)
@@ -247,7 +274,7 @@ void M6::LRParsing::CreateReductionItemTable()
 {
     m_reduction_items.clear();
 
-    for (auto i = static_cast<size_t>(0); i < m_expanding_grammar.size(); i++)
+    for (auto i = size_t(0); i < m_expanding_grammar.size(); i++)
     {
         auto left = std::get<0>(m_expanding_grammar[i]);
         auto production = std::get<1>(m_expanding_grammar[i]);
@@ -428,7 +455,7 @@ void M6::LRParsing::CreateFollowSet()
     }
 }
 
-void M6::LRParsing::Closure(std::set<ItemLR0> &items_set)
+void M6::LRParsing::Closure(std::set<ItemLR0>& items_set)
 {
     auto count = static_cast<size_t>(0);
 
@@ -442,7 +469,7 @@ void M6::LRParsing::Closure(std::set<ItemLR0> &items_set)
             auto left = std::get<0>(i);
             auto production = std::get<1>(i);
 
-            for (auto k = static_cast<size_t>(0), size = production.size(); k < size; k++)
+            for (auto k = size_t(0), size = production.size(); k < size; k++)
             {
                 if (k == size - size_t(1))
                     break;
@@ -464,7 +491,7 @@ void M6::LRParsing::Closure(std::set<ItemLR0> &items_set)
     }
 }
 
-void M6::LRParsing::Closure(std::set<ItemLR1> &items_set)
+void M6::LRParsing::Closure(std::set<ItemLR1>& items_set)
 {
     auto count = static_cast<size_t>(1);
     auto items_set_temp = std::set<ItemLR1>();
@@ -487,7 +514,7 @@ void M6::LRParsing::Closure(std::set<ItemLR1> &items_set)
             items_set_temp.insert(i);
 
             // 遍历 α·Bβ 定位到 B 的位置
-            for (auto k = static_cast<size_t>(0), size = production.size(); k < size; k++)
+            for (auto k = size_t(0), size = production.size(); k < size; k++)
             {
                 if (k == size - size_t(1))
                     break;
@@ -544,7 +571,7 @@ void M6::LRParsing::Closure(std::set<ItemLR1> &items_set)
         items_set.insert(std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), i.second));
 }
 
-std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0> &items_set, const Token &x)
+std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0>& items_set, const Token& x)
 {
     auto re = std::set<ItemLR0>();
 
@@ -573,7 +600,7 @@ std::set<M6::LRParsing::ItemLR0> M6::LRParsing::Go(const std::set<ItemLR0> &item
     return re;
 }
 
-std::set<M6::LRParsing::ItemLR1> M6::LRParsing::Go(const std::set<ItemLR1> &items_set, const Token &x)
+std::set<M6::LRParsing::ItemLR1> M6::LRParsing::Go(const std::set<ItemLR1>& items_set, const Token& x)
 {
     auto re = std::set<ItemLR1>();
 
@@ -657,7 +684,7 @@ void M6::LRParsing::BuildLR0ParsingTable()
         {
             if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("s") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"s") + std::to_wstring(m_DFA[std::make_tuple(index_I_k, x)]);
                 m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
@@ -677,7 +704,7 @@ void M6::LRParsing::BuildLR0ParsingTable()
 
             if (I_k.find(reduction_item) != I_k.end())
             {
-                auto r = std::string("r") + std::to_string(i.second);
+                auto r = std::wstring(L"r") + std::to_wstring(i.second);
 
                 for (auto x : m_terminals)
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
@@ -691,7 +718,7 @@ void M6::LRParsing::BuildLR0ParsingTable()
         {
             if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("g") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"g") + std::to_wstring(m_DFA[std::make_tuple(index_I_k, x)]);
                 m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
@@ -700,7 +727,7 @@ void M6::LRParsing::BuildLR0ParsingTable()
         if (I_k.find(start_item) != I_k.end())
         {
             m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(std::wstring(L"acc"));
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
@@ -723,7 +750,7 @@ void M6::LRParsing::BuildSLR1ParsingTable()
         {
             if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("s") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"s") + std::to_wstring(m_DFA[std::make_tuple(index_I_k, x)]);
                 m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
@@ -743,7 +770,7 @@ void M6::LRParsing::BuildSLR1ParsingTable()
 
             if (I_k.find(reduction_item) != I_k.end())
             {
-                auto r = std::string("r") + std::to_string(i.second);
+                auto r = std::wstring(L"r") + std::to_wstring(i.second);
 
                 for (auto x : m_follow_set[std::get<0>(reduction_item)])
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
@@ -757,7 +784,7 @@ void M6::LRParsing::BuildSLR1ParsingTable()
         {
             if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("g") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"g") + std::to_wstring(m_DFA[std::make_tuple(index_I_k, x)]);
                 m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
@@ -766,7 +793,7 @@ void M6::LRParsing::BuildSLR1ParsingTable()
         if (I_k.find(start_item) != I_k.end())
         {
             m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(std::wstring(L"acc"));
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
@@ -845,7 +872,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
         {
             if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("s") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"s") + std::to_wstring(m_DFA[std::make_tuple(index_I_k, x)]);
                 m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
@@ -867,7 +894,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
 
             if (I_k_temp.find(reduction_item) != I_k_temp.end())
             {
-                auto r = std::string("r") + std::to_string(i.second);
+                auto r = std::wstring(L"r") + std::to_wstring(i.second);
 
                 for (auto x : GetLookAheadTokens(I_k, reduction_item))
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
@@ -881,7 +908,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
         {
             if (m_DFA.find(std::make_tuple(index_I_k, x)) != m_DFA.end())
             {
-                auto s = std::string("g") + std::to_string(m_DFA[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"g") + std::to_wstring(m_DFA[std::make_tuple(index_I_k, x)]);
                 m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
@@ -890,7 +917,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
         if (I_k.find(start_item) != I_k.end())
         {
             m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(std::wstring(L"acc"));
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
@@ -899,7 +926,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
     CreateParsingTable(m_LR1, m_items_sets_LR1, m_items_sets_LR1_map);
 }
 
-void M6::LRParsing::MergeLookAheadTokens(const std::set<size_t> &same_cores_set, const size_t &index)
+void M6::LRParsing::MergeLookAheadTokens(const std::set<size_t>& same_cores_set, const size_t& index)
 {
     auto item_map_tokens = std::map<ItemLR0, std::set<Token>>();
     auto items_set = std::set<ItemLR0>();
@@ -999,7 +1026,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
         {
             if (m_DFA_LALR1.find(std::make_tuple(index_I_k, x)) != m_DFA_LALR1.end())
             {
-                auto s = std::string("s") + std::to_string(m_DFA_LALR1[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"s") + std::to_wstring(m_DFA_LALR1[std::make_tuple(index_I_k, x)]);
                 m_action_table[std::make_tuple(index_I_k, x)].insert(s);
             }
         }
@@ -1021,7 +1048,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
 
             if (I_k_temp.find(reduction_item) != I_k_temp.end())
             {
-                auto r = std::string("r") + std::to_string(i.second);
+                auto r = std::wstring(L"r") + std::to_wstring(i.second);
 
                 for (auto x : GetLookAheadTokens(I_k, reduction_item))
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
@@ -1035,7 +1062,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
         {
             if (m_DFA_LALR1.find(std::make_tuple(index_I_k, x)) != m_DFA_LALR1.end())
             {
-                auto s = std::string("g") + std::to_string(m_DFA_LALR1[std::make_tuple(index_I_k, x)]);
+                auto s = std::wstring(L"g") + std::to_wstring(m_DFA_LALR1[std::make_tuple(index_I_k, x)]);
                 m_goto_table[std::make_tuple(index_I_k, x)] = s;
             }
         }
@@ -1044,7 +1071,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
         if (I_k.find(start_item) != I_k.end())
         {
             m_action_table[std::make_tuple(index_I_k, m_end_of_file)].clear();
-            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert("acc");
+            m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(std::wstring(L"acc"));
         }
 
         // 5. 其余置错，为了清晰，不在 ACTION 和 GOTO 中表示
@@ -1053,7 +1080,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
     CreateParsingTable(m_LALR1, m_items_sets_LALR1, m_items_sets_LALR1_map);
 }
 
-void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
+void M6::LRParsing::CreateParsingTable(bool& grammar_flag)
 {
     grammar_flag = true;
     m_parsing_table.clear();
@@ -1061,7 +1088,7 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
     for (auto &i : m_items_sets_LR0orSLR1)
     {
         auto index_i = m_items_sets_LR0orSLR1_map[i];
-        auto index_i_str = std::to_string(index_i);
+        auto index_i_str = std::to_wstring(index_i);
 
         for (auto x : m_terminals)
         {
@@ -1069,14 +1096,15 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
 
             if (m_action_table.find(i_x) == m_action_table.end())
             {
-                m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
+                // 为了分析表清晰，error 部分使用空格填充
+                m_parsing_table[std::make_tuple(index_i_str, x)] = std::wstring(L" ");
                 continue;
             }
 
             if (m_action_table[i_x].size() > size_t(1))  // 大于 1 则说明有冲突
                 grammar_flag = false;  // 不是该类型文法
 
-            auto str = std::string("");
+            auto str = std::wstring(L"");
             for (auto s : m_action_table[i_x])
                 str += s;
 
@@ -1089,25 +1117,26 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
 
             if (m_goto_table.find(i_x) == m_goto_table.end())
             {
-                m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
+                // 为了分析表清晰，error 部分使用空格填充
+                m_parsing_table[std::make_tuple(index_i_str, x)] = std::wstring(L" ");
                 continue;
             }
 
-            auto str = std::string("");
+            auto str = std::wstring(L"");
             for (auto s : m_goto_table[i_x])
                 str += s;
 
             m_parsing_table[std::make_tuple(index_i_str, x)] = str;
         }
 
-        auto str = std::string("");
+        auto str = std::wstring(L"");
         for (auto s : m_action_table[std::make_tuple(index_i, m_end_of_file)])
             str += s;
         m_parsing_table[std::make_tuple(index_i_str, m_end_of_file)] = str;
     }
 }
 
-void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std::set<ItemLR1>> &items_sets, const std::map<std::set<ItemLR1>, size_t> &items_sets_map)
+void M6::LRParsing::CreateParsingTable(bool& grammar_flag, const std::vector<std::set<ItemLR1>>& items_sets, const std::map<std::set<ItemLR1>, size_t>& items_sets_map)
 {
     grammar_flag = true;
     m_parsing_table.clear();
@@ -1118,7 +1147,7 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std
     for (auto &i : items_sets_temp)
     {
         auto index_i = items_sets_map_temp[i];
-        auto index_i_str = std::to_string(index_i);
+        auto index_i_str = std::to_wstring(index_i);
 
         for (auto x : m_terminals)
         {
@@ -1126,14 +1155,15 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std
 
             if (m_action_table.find(i_x) == m_action_table.end())
             {
-                m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
+                // 为了分析表清晰，error 部分使用空格填充
+                m_parsing_table[std::make_tuple(index_i_str, x)] = std::wstring(L" ");
                 continue;
             }
 
             if (m_action_table[i_x].size() > size_t(1))  // 大于 1 则说明有冲突
                 grammar_flag = false;  // 不是该类型文法
 
-            auto str = std::string("");
+            auto str = std::wstring(L"");
             for (auto s : m_action_table[i_x])
                 str += s;
 
@@ -1146,18 +1176,19 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std
 
             if (m_goto_table.find(i_x) == m_goto_table.end())
             {
-                m_parsing_table[std::make_tuple(index_i_str, x)] = std::string("");
+                // 为了分析表清晰，error 部分使用空格填充
+                m_parsing_table[std::make_tuple(index_i_str, x)] = std::wstring(L" ");
                 continue;
             }
 
-            auto str = std::string("");
+            auto str = std::wstring(L"");
             for (auto s : m_goto_table[i_x])
                 str += s;
 
             m_parsing_table[std::make_tuple(index_i_str, x)] = str;
         }
 
-        auto str = std::string("");
+        auto str = std::wstring(L"");
         for (auto s : m_action_table[std::make_tuple(index_i, m_end_of_file)])
             str += s;
         m_parsing_table[std::make_tuple(index_i_str, m_end_of_file)] = str;
@@ -1171,9 +1202,102 @@ void M6::LRParsing::CopyDFA(std::map<std::tuple<size_t, Token>, size_t>& DFA)
         DFA[i.first] = i.second;
 }
 
-void M6::LRParsing::CopyParsingTable(std::map<std::tuple<std::string, Token>, std::string> &parsing_table)
+void M6::LRParsing::CopyParsingTable(std::map<std::tuple<std::wstring, Token>, std::wstring>& from_parsing_table, std::map<std::tuple<std::wstring, Token>, std::wstring>& to_parsing_table)
 {
-    parsing_table.clear();
-    for (auto &i : m_parsing_table)
-        parsing_table[i.first] = i.second;
+    to_parsing_table.clear();
+    for (auto &i : from_parsing_table)
+        to_parsing_table[i.first] = i.second;
+}
+
+void M6::LRParsing::Control()
+{
+    m_state_stack.clear();
+    m_tokens_stack.clear();
+    m_parsing_action_stack.clear();
+    m_parsing_process.clear();
+
+    m_state_stack.push_back(std::wstring(L"0"));
+    m_tokens_stack.push_back(m_end_of_file);
+
+    for (auto step_count = 1; RunCurStep(step_count); step_count++)
+        m_parsing_process.push_back(m_cur_parsing_data);
+
+    m_parsing_process.push_back(m_cur_parsing_data);
+}
+
+bool M6::LRParsing::RunCurStep(int step_count)
+{
+    ParsingStackToString(step_count, std::wstring(L""));
+
+    auto S = m_state_stack.back();
+    auto a = m_input_tokens.back();
+
+    auto temp = m_parsing_table[std::make_tuple(S, a)];
+
+    if (m_tokens_stack.back() == m_start_token)  // 当前符号栈栈顶元素为起始符号，说明输入符号串全部接受成功
+    {
+        std::get<4>(m_cur_parsing_data) = std::wstring(L"acc");
+        return false;
+    }
+
+    if (!temp.length())
+    {
+        std::get<4>(m_cur_parsing_data) = std::wstring(L"error");
+        return false;
+    }
+    else if (temp.front() == char('s'))  // parsing_table[S,a] == s_i 移进动作
+    {
+        // 将状态 i 和输入符号 a 进栈
+        m_state_stack.push_back(temp.substr(size_t(1)));
+        m_tokens_stack.push_back(a);
+
+        m_input_tokens.pop_back();
+        std::get<4>(m_cur_parsing_data) = temp;
+    }
+    else if (temp.front() == char('r'))  // parsing_table[S,a] == r_j 规约动作
+    {
+        // 用第 j 条规则 A->α 规约
+        auto production = m_expanding_grammar[std::stoull(temp.substr(size_t(1)))];
+
+        // 将 |α| 个状态和 |α| 个输入符号退栈
+        for (auto len = std::get<1>(production).size(); len; len--)
+        {
+            m_state_stack.pop_back();
+            m_tokens_stack.pop_back();
+        }
+
+        // 当前栈顶状态为 S'，将 A 和 parsing_table[S',A]=S" 进栈
+        S = m_state_stack.back();  // S'
+        m_tokens_stack.push_back(std::get<0>(production));
+        m_state_stack.push_back(m_parsing_table[std::make_tuple(S, std::get<0>(production))].substr(size_t(1)));
+
+        auto parsing_action = temp + std::wstring(L" ") + std::get<0>(production) + std::wstring(L" ->");
+        for (auto i : std::get<1>(production))
+            parsing_action += std::wstring(L" ") + i;
+        std::get<4>(m_cur_parsing_data) = parsing_action;
+    }
+    else
+    {
+        std::get<4>(m_cur_parsing_data) = std::wstring(L"error");
+        return false;
+    }
+
+    return true;
+}
+
+void M6::LRParsing::ParsingStackToString(int index, std::wstring parsing_action)
+{
+    auto state_stack_str = std::wstring(L"");
+    for (auto i : m_state_stack)
+        state_stack_str += i + std::wstring(L" ");
+
+    auto tokens_stack_str = std::wstring(L"");
+    for (auto i : m_tokens_stack)
+        tokens_stack_str += i + std::wstring(L" ");
+
+    auto input_tokens_str = std::wstring(L"");
+    for (auto i = m_input_tokens.rbegin(); i != m_input_tokens.rend(); ++i)
+        input_tokens_str += (*i) + std::wstring(L" ");
+
+    m_cur_parsing_data = std::make_tuple(std::to_wstring(index), state_stack_str, tokens_stack_str, input_tokens_str, parsing_action);
 }
