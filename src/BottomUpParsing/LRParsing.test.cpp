@@ -158,6 +158,44 @@ int main()
         PrintPArsingTokensResult(parsing_process);
     }
 
+    {
+        M6::LRParsing parser;
+        parser.SetStartToken(L"S", L"S'");
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"a", L"A", L"c", L"B", L"e"});
+        parser.AddProduction(L"A", std::vector<std::wstring>{L"b"});
+        parser.AddProduction(L"A", std::vector<std::wstring>{L"A", L"b"});
+        parser.AddProduction(L"B", std::vector<std::wstring>{L"d"});
+        parser.BuildLRParsingTable();
+        PrintGrammarType(L"LR(0)", parser.GetGrammarType());
+
+        auto parsing_process = std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>>();
+        parser.ParsingTokens(std::vector<std::wstring>{L"a", L"b", L"b", L"c", L"d", L"e"}, parsing_process);
+        PrintPArsingTokensResult(parsing_process);
+    }
+
+    {
+        M6::LRParsing parser;
+        parser.SetStartToken(L"S", L"S'");
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"A", L"a"});
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"b", L"A", L"c"});
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"B", L"c"});
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"b", L"B", L"a"});
+        parser.AddProduction(L"A", std::vector<std::wstring>{L"d"});
+        parser.AddProduction(L"B", std::vector<std::wstring>{L"d"});
+        parser.BuildLRParsingTable();
+        PrintGrammarType(L"LR(1)", parser.GetGrammarType());
+    }
+
+    {
+        M6::LRParsing parser;
+        parser.SetStartToken(L"S", L"S'");
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"i", L"S", L"e", L"S"});
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"i", L"S"});
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"a"});
+        parser.BuildLRParsingTable();
+        PrintGrammarType(L"Not LR grammar", parser.GetGrammarType());
+    }
+
     system("pause");
     return 0;
 }

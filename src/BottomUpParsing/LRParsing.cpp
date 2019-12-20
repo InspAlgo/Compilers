@@ -81,7 +81,6 @@ void M6::LRParsing::Clear()
     m_input_tokens.clear();
     m_state_stack.clear();
     m_tokens_stack.clear();
-    m_parsing_action_stack.clear();
     m_parsing_process.clear();
 }
 
@@ -163,9 +162,60 @@ void M6::LRParsing::BuildLRParsingTable()
         CopyParsingTable(m_parsing_table_LR1, m_parsing_table);
 }
 
+void M6::LRParsing::GetExpandingGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &expanding_grammar)
+{
+    expanding_grammar.clear();
+    for (auto &i : m_expanding_grammar)
+        expanding_grammar.push_back(i);
+}
+
 std::wstring M6::LRParsing::GetGrammarType()
 {
     return m_LR0 ? std::wstring(L"LR(0)") : (m_SLR1 ? std::wstring(L"SLR(1)") : (m_LALR1 ? std::wstring(L"LALR(1)") : (m_LR1 ? std::wstring(L"LR(1)") : std::wstring(L"Not LR Grammar"))));
+}
+
+void M6::LRParsing::GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &items_sets)
+{
+    items_sets.clear();
+    for (auto &i : m_items_sets_LR0orSLR1)
+        items_sets.push_back(i);
+}
+
+void M6::LRParsing::GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>, std::set<std::wstring>>>> &items_sets)
+{
+    items_sets.clear();
+
+    if (m_LALR1)
+    {
+        for (auto &i : m_items_sets_LALR1)
+            items_sets.push_back(i);
+    }
+    else if (m_LR1)
+    {
+        for (auto &i : m_items_sets_LR1)
+            items_sets.push_back(i);
+    }
+}
+
+void M6::LRParsing::GetDFA(std::map<std::tuple<size_t, std::wstring>, size_t> &DFA)
+{
+    DFA.clear();
+
+    if (m_LR0 || m_SLR1)
+    {
+        for (auto &i : m_DFA_LR0orSLR1)
+            DFA[i.first] = i.second;
+    }
+    else if (m_LALR1)
+    {
+        for (auto &i : m_DFA_LALR1)
+            DFA[i.first] = i.second;
+    }
+    else if (m_LR1)
+    {
+        for (auto &i : m_DFA_LR1)
+            DFA[i.first] = i.second;
+    }
 }
 
 void M6::LRParsing::GetParsingTable(std::map<std::tuple<std::wstring, std::wstring>, std::wstring> &parsing_table)
@@ -1219,7 +1269,6 @@ void M6::LRParsing::Control()
 {
     m_state_stack.clear();
     m_tokens_stack.clear();
-    m_parsing_action_stack.clear();
     m_parsing_process.clear();
 
     m_state_stack.push_back(std::wstring(L"0"));
@@ -1235,8 +1284,8 @@ bool M6::LRParsing::RunCurStep(int step_count)
 {
     ParsingStackToString(step_count, std::wstring(L""));
 
-    auto S = m_state_stack.back();
-    auto a = m_input_tokens.back();
+    auto S = m_state_stack.back();  // 获取当前状态栈栈顶元素
+    auto a = m_input_tokens.back();  // 获取当前输入串的首字符
 
     auto temp = m_parsing_table[std::make_tuple(S, a)];
 
@@ -1257,7 +1306,7 @@ bool M6::LRParsing::RunCurStep(int step_count)
         m_state_stack.push_back(temp.substr(size_t(1)));
         m_tokens_stack.push_back(a);
 
-        m_input_tokens.pop_back();
+        m_input_tokens.pop_back();  // 发生移进动作，故将输入字符串的首字符弹出
         std::get<4>(m_cur_parsing_data) = temp;
     }
     else if (temp.front() == char('r'))  // parsing_table[S,a] == r_j 归约动作

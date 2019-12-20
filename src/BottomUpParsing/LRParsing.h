@@ -49,9 +49,25 @@ namespace M6
         // 构建 LR 分析表
         void BuildLRParsingTable();
 
+        // 获取文法的拓广文法
+        // @param expanding_grammar 存储获得的文法的拓广文法
+        void GetExpandingGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &expanding_grammar);
+
         // 获取文法类型
         // return 返回文法类型 L"LR(0)" / L"SLR(1)" / L"LALR(1)" / L"LR(1)" / L"Not LR Grammar"
         std::wstring GetGrammarType();
+
+        // 获取 LR(0)/SLR(1) 文法的项目集族
+        // @param items_sets 存储获得的 LR(0)/SLR(1) 文法的项目集族
+        void GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &items_sets);
+
+        // 获取 LR(1)/LALR(1) 文法的项目集族
+        // @param items_sets 存储获得的 LR(1)/LALR(1) 文法的项目集族
+        void GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>, std::set<std::wstring>>>> &items_sets);
+
+        // 获取识别文法活前缀的 DFA
+        // @param DFA 存储获得的识别文法活前缀的 DFA
+        void GetDFA(std::map<std::tuple<size_t, std::wstring>, size_t> &DFA);
 
         // 获取文法分析表
         // @param parsing_table 存储获取到的分析表 map[<步骤,符号>]=内容("acc"/"si"/"rj"/" ")
@@ -70,19 +86,20 @@ namespace M6
         void ParsingTokens(const std::vector<std::wstring> &input_tokens, std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>> &parsing_process);
 
     private:
-        using Token = std::wstring;  // 符号类型，像非终结符 A 或者终结符 a/id
-        using ItemLR0 = std::tuple<Token, std::vector<Token>>;  // LR(0)/SLR(1) 文法的项目类型 [A->α·β] --> <A, [α,·,β]>
-        using ItemLR1 = std::tuple<Token, std::vector<Token>, std::set<Token>>;  // LR(1)/LALR(1) 文法的项目类型 [A->α·β, a/b] --> <A,  [α,·,β], {a,b}>
+        // 像非终结符 A 或者终结符 a/id，它们均为一个 Token，"A","a","id"
+        using Token = std::wstring;  // 符号类型
 
-        // 项目类型的数据类型
         // LR(0)/SLR(1) 归约项目 A->α· --> <A, [α,·]> (α 是一个产生式右部)
         // LR(0)/SLR(1) 移进项目 A->α·aβ --> <A, [α,·,a,β]> (a 是终结符)
         // LR(0)/SLR(1) 待约项目 A->α·Bβ --> <A, [α,·,B,β]> (B 是非终结符)
         // LR(0)/SLR(1) 接受项目 S'->S· --> <S', [S,·]> (S' 是拓广文法的起始符号)
+        using ItemLR0 = std::tuple<Token, std::vector<Token>>;  // LR(0)/SLR(1) 文法的项目类型 [A->α·β] --> <A, [α,·,β]>
+
         // LR(1)/LALR(1) 归约项目 A->α·, x/y/z --> <A, [α,·], {x,y,z}> (α 是一个产生式右部)
         // LR(1)/LALR(1) 移进项目 A->α·aβ, x/y/z --> <A, [α,·,a,β], {x,y,z}> (a 是终结符)
         // LR(1)/LALR(1) 待约项目 A->α·Bβ, x/y/z --> <A, [α,·,B,β], {x,y,z}> (B 是非终结符)
         // LR(1)/LALR(1) 接受项目 S'->S·, $ --> <S', [S,·], {$}> (S' 是拓广文法的起始符号)
+        using ItemLR1 = std::tuple<Token, std::vector<Token>, std::set<Token>>;  // LR(1)/LALR(1) 文法的项目类型 [A->α·β, a/b] --> <A,  [α,·,β], {a,b}>
 
     private:
         //////////////////////////////////////////
@@ -222,60 +239,87 @@ namespace M6
         //
         ///////////////////////////////////
 
-        bool m_LR0;  // 标记是否为 LR(0) 文法
-        bool m_SLR1;  // 标记是否为 SLR(1) 文法
+        bool m_LR0;    // 标记是否为 LR(0) 文法
+        bool m_SLR1;   // 标记是否为 SLR(1) 文法
         bool m_LALR1;  // 标记是否为 LALR(1) 文法
-        bool m_LR1;  // 标记是否为 LR(1) 文法
+        bool m_LR1;    // 标记是否为 LR(1) 文法
 
-        Token m_start_token;  // 文法中的起始符号
+        Token m_start_token;      // 文法中的起始符号
         Token m_new_start_token;  // 拓广文法中的新起始符号
-        Token m_dot;  // 一个项目里的点号
-        Token m_end_of_file;  // 文件结束符，即左界符或右界符
+        Token m_dot;              // 一个项目里的点号
+        Token m_end_of_file;      // 文件结束符，即左界符或右界符
         std::map<Token, std::set<std::vector<Token>>> m_original_grammar;  // 输入的初始文法
 
         std::set<Token> m_nonterminals;  // 初始文法的非终结符集合
-        std::set<Token> m_terminals;  // 初始文法的终结符集合
-        std::set<Token> m_alltokens;  // 初始文法的所有非终结符和终结符集合
+        std::set<Token> m_terminals;     // 初始文法的终结符集合
+        std::set<Token> m_alltokens;     // 初始文法的所有非终结符和终结符集合
         std::set<Token> m_expanding_nonterminals;  // 拓广文法的非终结符集合
-        std::set<Token> m_expanding_terminals;  // 拓广文法的终结符集合
-        std::set<Token> m_expanding_alltokens;  // 拓广文法的所有非终结符和终结符集合
+        std::set<Token> m_expanding_terminals;     // 拓广文法的终结符集合
+        std::set<Token> m_expanding_alltokens;     // 拓广文法的所有非终结符和终结符集合
 
         std::vector<std::tuple<Token, std::vector<Token>>> m_expanding_grammar;  // 拓广文法
         std::map<Token, std::set<ItemLR0>> m_original_items;  // 初始项目集 即 A->·aB B->·Da 这种 dot 符在首位的项目
         std::map<ItemLR0, size_t> m_reduction_items;  // 所有的归约项目  <归约项目, 对应的拓广文法中的序号>
         
         std::map<Token, bool> m_nullable;  // 拓广文法的非终结符是否可推导到 epsilon
-        std::map<Token, std::set<Token>> m_first_set;  // 拓广文法的 FIRST 集(非推广形式)
+        std::map<Token, std::set<Token>> m_first_set;   // 拓广文法的 FIRST 集(非推广形式)
         std::map<Token, std::set<Token>> m_follow_set;  // 拓广文法的 FOLLOW 集
 
+        // vector 里为项目集，其下标即项目集对应的标号，即项目集 I 的编号为 k 则 m_items_sets_LR0orSLR1[k] = I
         std::vector<std::set<ItemLR0>> m_items_sets_LR0orSLR1;  // LR(0)/SLR(1) 项目集规范族，因为 LR(0) 和 SLR(1) 的项目集族相同
+
+        // map[项目集 I] = 项目集的编号 k m_items_sets_LR0orSLR1[k] = I
         std::map<std::set<ItemLR0>, size_t> m_items_sets_LR0orSLR1_map;  // 方便获取 m_items_sets_LR0orSLR1 中项目集位置
 
+        // vector 里为项目集，其下标即项目集对应的标号，即项目集 I 的编号为 k 则 m_items_sets_LR1[k] = I
         std::vector<std::set<ItemLR1>> m_items_sets_LR1;  // LR(1) 项目集族
+
+        // map[项目集 I] = 项目集的编号 k m_items_sets_LR1[k] = I
         std::map<std::set<ItemLR1>, size_t> m_items_sets_LR1_map;  // 方便获取 m_items_sets_2 中项目集位置
+
+        // 如 LR(1) 项目集 I 其编号为 k，I 内容为 {[A1->α1·β1, a1], [A2->α2·β2,a2], ...}
+        // 其对应的 LR(0) 项目集为 m_items_sets_LR1_map_LR0[k] = {[A1->α1·β1], [A2->α2·β2], ...}
         std::map<size_t, std::set<ItemLR0>> m_items_sets_LR1_map_LR0;  // LR(1) 项目集中对应的 LR(0) 项目集
 
+        // vector 里为项目集，其下标即项目集对应的标号，即项目集 I 的编号为 k 则 m_items_sets_LALR1[k] = I
         std::vector<std::set<ItemLR1>> m_items_sets_LALR1;  // LALR(1) 合并同心集后的项目集族
+
+        // map[项目集 I] = 项目集的编号 k m_items_sets_LALR1_map[k] = I
         std::map<std::set<ItemLR1>, size_t> m_items_sets_LALR1_map;  // 方便获取 m_items_sets_LALR1 中项目集位置
+
+        // 如 LALR(1) 项目集 I 其编号为 k，I 内容为 {[A1->α1·β1, a1], [A2->α2·β2,a2], ...}
+        // 其对应的 LR(0) 项目集为 m_items_sets_LALR1_map_LR0[k] = {[A1->α1·β1], [A2->α2·β2], ...}
         std::map<size_t, std::set<ItemLR0>> m_items_sets_LALR1_map_LR0;  // LALR(1) 项目集中对应的 LR(0) 项目集
+
+        // LR(1) 项目集 I_i 和 I_j 合并同心集得到 LALR(1) 项目集 I'_k
+        // m_items_sets_LALR1_map_LR1[k] = {i, j}
         std::map<size_t, std::set<size_t>> m_items_sets_LALR1_map_LR1;  // 组成 LALR(1) 项目集对应的 LR(1) 项目集编号
+
+        // LR(1) 项目集 I_i 和 I_j 合并同心集得到 LALR(1) 项目集 I'_k
+        // m_items_sets_LR1_map_LALR1[i]=k, m_items_sets_LR1_map_LALR1[j]=k
         std::map<size_t, size_t> m_items_sets_LR1_map_LALR1;  // LR(1) 项目集对应的 LALR(1) 项目集
 
         // DFA map[<项目集 I 的编号, 符号 x>] = 项目集 J 的编号 GO(I,x)=J
-        std::map<std::tuple<size_t, Token>, size_t> m_DFA;  // 当前文法项目集的 DFA
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA;            // 当前文法项目集的 DFA
         std::map<std::tuple<size_t, Token>, size_t> m_DFA_LR0orSLR1;  // LR(0) 项目集的 DFA
-        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LALR1;  // LR(1) 项目集的 DFA
-        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LR1;  // LALR(1) 项目集的 DFA
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LALR1;      // LR(1) 项目集的 DFA
+        std::map<std::tuple<size_t, Token>, size_t> m_DFA_LR1;        // LALR(1) 项目集的 DFA
 
-        // ACTION 表 map[<项目集 I 的编号, 符号 x>] = {动作内容} ("acc", "si", "rj", " ") 动作内容使用集合表示是因为可能存在冲突，那样就会有多个动作，所以用集合来存放，如果集合内的动作数量为 1 则没有冲突产生
+        // ACTION 表 map[<项目集 I 的编号, 符号 x>] = {动作内容} ("acc", "si", "rj", " ") x 是 终结符或结束符 $
+        // 动作内容使用集合表示是因为可能存在冲突，那样就会有多个动作，所以用集合来存放，如果集合内的动作数量为 1 则没有冲突产生
         std::map<std::tuple<size_t, Token>, std::set<std::wstring>> m_action_table;  //  当前文法 ACTION 表
+
+        // GOTO 表 map[<项目集 I 的编号, 符号 x> = 项目集 J 的编号 x 是非终结符
         std::map<std::tuple<size_t, Token>, std::wstring> m_goto_table;  //  当前文法 GOTO 表
 
-        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table;  //  当前文法 LR 分析表
-        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LR0;  // LR(0) 分析表
-        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_SLR1;  // SLR(1) 分析表
+        // LR 分析表 map[<项目集编号, 符号>] = 分析表内容 ("acc", "si", "rj", "gk", " ")
+        // 由 ACTION 表到分析表时，如果有冲突存在例如 ACTION map[<"2", "a">] = {"s1", "r3"}
+        // 那么得到的分析表为 map[<"2", "a">] = "s1r3"
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table;        // 当前文法 LR 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LR0;    // LR(0) 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_SLR1;   // SLR(1) 分析表
         std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LALR1;  // LALR(1) 分析表
-        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LR1;  // LR(1) 分析表
+        std::map<std::tuple<std::wstring, Token>, std::wstring> m_parsing_table_LR1;    // LR(1) 分析表
 
     private:
         ///////////////////////////////////
@@ -284,11 +328,21 @@ namespace M6
         //
         ///////////////////////////////////
 
+        // 倒序存储，如外部输入的输入串为 input_tokens["a","a","c","b","b"] 则 m_input_tokens["$","b","b","c","a","a"]
         std::vector<Token> m_input_tokens;  // 输入符号串
+
+        // 倒序存储，m_state_stack.front() 得到的是栈底元素 m_state_stack.back() 得到的是栈顶元素
         std::vector<std::wstring> m_state_stack;  // 状态栈
+
+        // 倒序存储，m_tokens_stack.front() 得到的是栈底元素 m_tokens_stack.back() 得到的是栈顶元素
         std::vector<Token> m_tokens_stack;  // 符号栈
-        std::vector<std::wstring> m_parsing_action_stack;  // 分析动作栈
+
+        // <步骤编号, 状态栈内容, 符号栈内容, 输入符号串内容, 分析动作>
+        // 如 <"3", "0 4 4 ", "$ a a ", "c b b $ ", "s5">
+        // 如 <"4", "0 4 4 5 ", "$ a a c ", "b b $ ", "r4 A -> a A b">
         std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring> m_cur_parsing_data;  // 当前分析数据
+
+        // 当每一步完成后，存放当前分析数据，从而记录分析过程
         std::vector<std::tuple<std::wstring, std::wstring, std::wstring, std::wstring, std::wstring>> m_parsing_process;  // 分析过程
     };
 }
