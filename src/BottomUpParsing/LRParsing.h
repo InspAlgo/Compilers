@@ -53,6 +53,14 @@ namespace M6
         // @param expanding_grammar 存储获得的文法的拓广文法
         void GetExpandingGrammar(std::vector<std::tuple<std::wstring, std::vector<std::wstring>>> &expanding_grammar);
 
+        // 获取原文法的终结符
+        // @param terminals 存储获得的所有终结符
+        void GetTerminals(std::vector<std::wstring> &terminals);
+
+        // 获取原文法的非终结符
+        // @param nonterminals 存储获得的所有非终结符
+        void GetNonterminals(std::vector<std::wstring> &nonterminals);
+
         // 获取文法类型
         // return 返回文法类型 L"LR(0)" / L"SLR(1)" / L"LALR(1)" / L"LR(1)" / L"Not LR Grammar"
         std::wstring GetGrammarType();
@@ -239,6 +247,7 @@ namespace M6
         //
         ///////////////////////////////////
 
+        // 如果 m_LR0 = true，则 m_SLR1=m_LALR1=m_LR1=true，如果 m_LALR1=true，则 m_LR0=m_SLR1=false,m_LR1=true
         bool m_LR0;    // 标记是否为 LR(0) 文法
         bool m_SLR1;   // 标记是否为 SLR(1) 文法
         bool m_LALR1;  // 标记是否为 LALR(1) 文法
@@ -251,7 +260,7 @@ namespace M6
         std::map<Token, std::set<std::vector<Token>>> m_original_grammar;  // 输入的初始文法
 
         std::set<Token> m_nonterminals;  // 初始文法的非终结符集合
-        std::set<Token> m_terminals;     // 初始文法的终结符集合
+        std::set<Token> m_terminals;     // 初始文法的终结符集合，epsilon 不属于终结符
         std::set<Token> m_alltokens;     // 初始文法的所有非终结符和终结符集合
         std::set<Token> m_expanding_nonterminals;  // 拓广文法的非终结符集合
         std::set<Token> m_expanding_terminals;     // 拓广文法的终结符集合

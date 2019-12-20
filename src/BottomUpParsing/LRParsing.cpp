@@ -123,6 +123,7 @@ void M6::LRParsing::BuildLRParsingTable()
     {
         CopyDFA(m_DFA_LR0orSLR1);
         CopyParsingTable(m_parsing_table, m_parsing_table_LR0);
+        m_SLR1 = m_LALR1 = m_LR1 = true;
         return;
     }
 
@@ -132,6 +133,7 @@ void M6::LRParsing::BuildLRParsingTable()
     {
         CopyDFA(m_DFA_LR0orSLR1);
         CopyParsingTable(m_parsing_table, m_parsing_table_SLR1);
+        m_LALR1 = m_LR1 = true;
         return;
     }
 
@@ -169,6 +171,20 @@ void M6::LRParsing::GetExpandingGrammar(std::vector<std::tuple<std::wstring, std
         expanding_grammar.push_back(i);
 }
 
+void M6::LRParsing::GetTerminals(std::vector<std::wstring> &terminals)
+{
+    terminals.clear();
+    for (auto &i : m_terminals)
+        terminals.push_back(i);
+}
+
+void M6::LRParsing::GetNonterminals(std::vector<std::wstring>& nonterminals)
+{
+    nonterminals.clear();
+    for (auto &i : m_nonterminals)
+        nonterminals.push_back(i);
+}
+
 std::wstring M6::LRParsing::GetGrammarType()
 {
     return m_LR0 ? std::wstring(L"LR(0)") : (m_SLR1 ? std::wstring(L"SLR(1)") : (m_LALR1 ? std::wstring(L"LALR(1)") : (m_LR1 ? std::wstring(L"LR(1)") : std::wstring(L"Not LR Grammar"))));
@@ -176,13 +192,20 @@ std::wstring M6::LRParsing::GetGrammarType()
 
 void M6::LRParsing::GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &items_sets)
 {
+    if (!m_LR1)  // 如果是非 LR 文法
+        return;
+
     items_sets.clear();
+
     for (auto &i : m_items_sets_LR0orSLR1)
         items_sets.push_back(i);
 }
 
 void M6::LRParsing::GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>, std::set<std::wstring>>>> &items_sets)
 {
+    if (m_LR0 || m_SLR1)
+        return;
+
     items_sets.clear();
 
     if (m_LALR1)
@@ -190,7 +213,7 @@ void M6::LRParsing::GetItemsSets(std::vector<std::set<std::tuple<std::wstring, s
         for (auto &i : m_items_sets_LALR1)
             items_sets.push_back(i);
     }
-    else if (m_LR1)
+    else  // LR(1) 文法或非 LR 文法，均使用 LR(1) 文法的项目集
     {
         for (auto &i : m_items_sets_LR1)
             items_sets.push_back(i);
@@ -211,7 +234,7 @@ void M6::LRParsing::GetDFA(std::map<std::tuple<size_t, std::wstring>, size_t> &D
         for (auto &i : m_DFA_LALR1)
             DFA[i.first] = i.second;
     }
-    else if (m_LR1)
+    else  // LR(1) 文法或非 LR 文法，均使用 LR(1) 文法的 DFA
     {
         for (auto &i : m_DFA_LR1)
             DFA[i.first] = i.second;
@@ -286,7 +309,8 @@ void M6::LRParsing::CreateTerminalSet()
 
     for (auto i : m_alltokens)
     {
-        if (m_nonterminals.find(i) == m_nonterminals.end())
+        // 凡不是非终结符并且不是 epsilon 的符号均为终结符
+        if ((m_nonterminals.find(i) == m_nonterminals.end()) && i.length())
             m_terminals.insert(i);
     }
 }
