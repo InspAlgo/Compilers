@@ -106,7 +106,7 @@ namespace M6
         // LR(1)/LALR(1) 归约项目 A->α·, x/y/z --> <A, [α,·], {x,y,z}> (α 是一个产生式右部)
         // LR(1)/LALR(1) 移进项目 A->α·aβ, x/y/z --> <A, [α,·,a,β], {x,y,z}> (a 是终结符)
         // LR(1)/LALR(1) 待约项目 A->α·Bβ, x/y/z --> <A, [α,·,B,β], {x,y,z}> (B 是非终结符)
-        // LR(1)/LALR(1) 接受项目 S'->S·, $ --> <S', [S,·], {$}> (S' 是拓广文法的起始符号)
+        // LR(1)/LALR(1) 接受项目 S'->S·, ＄ --> <S', [S,·], {＄}> (S' 是拓广文法的起始符号)
         using ItemLR1 = std::tuple<Token, std::vector<Token>, std::set<Token>>;  // LR(1)/LALR(1) 文法的项目类型 [A->α·β, a/b] --> <A,  [α,·,β], {a,b}>
 
     private:

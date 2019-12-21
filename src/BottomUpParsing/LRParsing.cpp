@@ -103,6 +103,9 @@ void M6::LRParsing::SetEndOfFile(const std::wstring &end_of_file)
 void M6::LRParsing::AddProduction(const std::wstring &production_left,
     const std::vector<std::wstring> &production_right)
 {
+    if (!production_left.length() || !production_right.size())
+        return;
+
     m_nonterminals.insert(production_left);
     m_original_grammar[production_left].insert(production_right);
 
