@@ -122,20 +122,22 @@ void M6::LRParsing::BuildLRParsingTable()
 
     BuildLR0ParsingTable();
 
+    CopyDFA(m_DFA_LR0orSLR1);
+    CopyParsingTable(m_parsing_table, m_parsing_table_LR0);
+
     if (m_LR0)
     {
-        CopyDFA(m_DFA_LR0orSLR1);
-        CopyParsingTable(m_parsing_table, m_parsing_table_LR0);
         m_SLR1 = m_LALR1 = m_LR1 = true;
         return;
     }
 
     BuildSLR1ParsingTable();
 
+    CopyDFA(m_DFA_LR0orSLR1);
+    CopyParsingTable(m_parsing_table, m_parsing_table_SLR1);
+
     if (m_SLR1)
     {
-        CopyDFA(m_DFA_LR0orSLR1);
-        CopyParsingTable(m_parsing_table, m_parsing_table_SLR1);
         m_LALR1 = m_LR1 = true;
         return;
     }
@@ -146,24 +148,22 @@ void M6::LRParsing::BuildLRParsingTable()
 
     BuildLR1ParsingTable();
 
+    CopyDFA(m_DFA_LR1);
+    CopyParsingTable(m_parsing_table, m_parsing_table_LR1);
+
     if (m_LR1)
     {
-        CopyDFA(m_DFA_LR1);
-        CopyParsingTable(m_parsing_table, m_parsing_table_LR1);
-
         BuildItem3sSets();
 
         UpdateDFAofLALR1();
 
         BuildLALR1ParsingTable();
-    }
 
-    if (m_LALR1)
-    {
         CopyDFA(m_DFA_LALR1);
         CopyParsingTable(m_parsing_table, m_parsing_table_LALR1);
     }
-    else
+
+    if (!m_LALR1)
         CopyParsingTable(m_parsing_table_LR1, m_parsing_table);
 }
 
@@ -195,7 +195,7 @@ std::wstring M6::LRParsing::GetGrammarType()
 
 void M6::LRParsing::GetItemsSets(std::vector<std::set<std::tuple<std::wstring, std::vector<std::wstring>>>> &items_sets)
 {
-    if (!m_LR1)  // 如果是非 LR 文法
+    if (!m_LR1)  // 如果是非 LR 文法，不可以调用此类型方法
         return;
 
     items_sets.clear();
@@ -779,7 +779,7 @@ void M6::LRParsing::BuildLR0ParsingTable()
         {
             auto reduction_item = i.first;
 
-            if (!i.second)
+            if (!i.second)  // 找到 S'->S· 项目
             {
                 start_item = i.first;
                 continue;
@@ -845,7 +845,7 @@ void M6::LRParsing::BuildSLR1ParsingTable()
         {
             auto reduction_item = i.first;
 
-            if (!i.second)
+            if (!i.second)  // 找到 S'->S· 项目
             {
                 start_item = i.first;
                 continue;
@@ -857,8 +857,6 @@ void M6::LRParsing::BuildSLR1ParsingTable()
 
                 for (auto x : m_follow_set[std::get<0>(reduction_item)])
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
-
-                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
             }
         }
 
@@ -967,7 +965,7 @@ void M6::LRParsing::BuildLR1ParsingTable()
         {
             auto reduction_item = i.first;
 
-            if (!i.second)
+            if (!i.second)  // 找到 S'->S· 项目
             {
                 start_item = std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), std::set<Token>{m_end_of_file});
                 continue;
@@ -981,8 +979,6 @@ void M6::LRParsing::BuildLR1ParsingTable()
 
                 for (auto x : GetLookAheadTokens(I_k, reduction_item))
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
-
-                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
             }
         }
 
@@ -1121,7 +1117,7 @@ void M6::LRParsing::BuildLALR1ParsingTable()
         {
             auto reduction_item = i.first;
 
-            if (!i.second)
+            if (!i.second)  // 找到 S'->S· 项目
             {
                 start_item = std::make_tuple(std::get<0>(i.first), std::get<1>(i.first), std::set<Token>{m_end_of_file});
                 continue;
@@ -1135,8 +1131,6 @@ void M6::LRParsing::BuildLALR1ParsingTable()
 
                 for (auto x : GetLookAheadTokens(I_k, reduction_item))
                     m_action_table[std::make_tuple(index_I_k, x)].insert(r);
-
-                m_action_table[std::make_tuple(index_I_k, m_end_of_file)].insert(r);
             }
         }
 
@@ -1215,6 +1209,10 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag)
         auto str = std::wstring(L"");
         for (auto s : m_action_table[std::make_tuple(index_i, m_end_of_file)])
             str += s;
+        
+        if (m_action_table[std::make_tuple(index_i, m_end_of_file)].size() > size_t(1))  // 大于 1 则说明有冲突
+            grammar_flag = false;  // 不是该类型文法
+
         m_parsing_table[std::make_tuple(index_i_str, m_end_of_file)] = str;
     }
 }
@@ -1274,6 +1272,10 @@ void M6::LRParsing::CreateParsingTable(bool &grammar_flag, const std::vector<std
         auto str = std::wstring(L"");
         for (auto s : m_action_table[std::make_tuple(index_i, m_end_of_file)])
             str += s;
+
+        if (m_action_table[std::make_tuple(index_i, m_end_of_file)].size() > size_t(1))  // 大于 1 则说明有冲突
+            grammar_flag = false;  // 不是该类型文法
+
         m_parsing_table[std::make_tuple(index_i_str, m_end_of_file)] = str;
     }
 }
