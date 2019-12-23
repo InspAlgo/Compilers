@@ -1318,7 +1318,8 @@ bool M6::LRParsing::RunCurStep(int step_count)
 
     auto temp = m_parsing_table[std::make_tuple(S, a)];
 
-    if (m_tokens_stack.back() == m_start_token)  // 当前符号栈栈顶元素为起始符号，说明输入符号串全部接受成功
+    // 当前符号栈栈顶元素为起始符号且输入符号已全部读进，说明输入符号串全部接受成功
+    if (m_tokens_stack.back() == m_start_token && m_input_tokens.size() == size_t(1)) 
     {
         std::get<4>(m_cur_parsing_data) = std::wstring(L"acc");
         return false;
