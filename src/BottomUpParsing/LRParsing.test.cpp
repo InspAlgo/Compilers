@@ -196,6 +196,17 @@ int main()
         PrintGrammarType(L"Not LR grammar", parser.GetGrammarType());
     }
 
+    {
+        M6::LRParsing parser;
+        parser.SetStartToken(L"S", L"S'");
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"S", L"a", L"b"});
+        parser.AddProduction(L"S", std::vector<std::wstring>{L"b", L"R"});
+        parser.AddProduction(L"R", std::vector<std::wstring>{L"S"});
+        parser.AddProduction(L"R", std::vector<std::wstring>{L"a"});
+        parser.BuildLRParsingTable();
+        PrintGrammarType(L"Not LR grammar", parser.GetGrammarType());
+    }
+
     system("pause");
     return 0;
 }
